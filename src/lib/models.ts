@@ -7,31 +7,31 @@ export const providerLabels = {
 
 export const modelOptions: ModelOption[] = [
   {
-    id: "cosmos-reason2-8b",
+    id: "nvidia/cosmos-reason2-8b",
     label: "cosmos-reason2-8b",
     provider: "nvidia",
     role: "Primary video-analysis model",
   },
   {
-    id: "Qwen3.5-122B-A10B",
+    id: "qwen/qwen3.5-122b-a10b",
     label: "Qwen3.5-122B-A10B",
     provider: "nvidia",
     role: "Strong NVIDIA fallback",
   },
   {
-    id: "Qwen3.5-397B-A17B",
+    id: "qwen/qwen3.5-397b-a17b",
     label: "Qwen3.5-397B-A17B",
     provider: "nvidia",
     role: "High-capability NVIDIA fallback",
   },
   {
-    id: "Gemma 4 31B IT",
+    id: "google/gemma-4-31b-it",
     label: "Gemma 4 31B IT",
     provider: "nvidia",
     role: "NVIDIA Gemma fallback",
   },
   {
-    id: "gemma-3n-e4b-it",
+    id: "google/gemma-3n-e4b-it",
     label: "gemma-3n-e4b-it",
     provider: "nvidia",
     role: "Smaller NVIDIA fallback",

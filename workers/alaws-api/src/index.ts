@@ -29,11 +29,11 @@ type Env = {
 };
 
 const fallbackOrder: Array<{ provider: Provider; model: string }> = [
-  { provider: "nvidia", model: "cosmos-reason2-8b" },
-  { provider: "nvidia", model: "Qwen3.5-122B-A10B" },
-  { provider: "nvidia", model: "Qwen3.5-397B-A17B" },
-  { provider: "nvidia", model: "Gemma 4 31B IT" },
-  { provider: "nvidia", model: "gemma-3n-e4b-it" },
+  { provider: "nvidia", model: "nvidia/cosmos-reason2-8b" },
+  { provider: "nvidia", model: "qwen/qwen3.5-122b-a10b" },
+  { provider: "nvidia", model: "qwen/qwen3.5-397b-a17b" },
+  { provider: "nvidia", model: "google/gemma-4-31b-it" },
+  { provider: "nvidia", model: "google/gemma-3n-e4b-it" },
   { provider: "openrouter", model: "google/gemma-4-31b-it:free" },
   { provider: "openrouter", model: "google/gemma-4-26b-a4b-it:free" },
 ];
@@ -112,7 +112,7 @@ function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
     sessionId: body.sessionId ?? "session_unknown",
     prompt: body.prompt.trim(),
     provider: body.provider === "openrouter" ? "openrouter" : "nvidia",
-    model: body.model?.trim() || "cosmos-reason2-8b",
+    model: body.model?.trim() || "nvidia/cosmos-reason2-8b",
     taskMode: normalizeTaskMode(body.taskMode),
     instructions: body.instructions?.trim() || "You are Alaws lang, a concise AI assistant.",
     fallback: body.fallback !== false,
