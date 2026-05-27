@@ -41,6 +41,7 @@ export default function AppShell() {
   const [instructions, setInstructions] = useState("");
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -117,6 +118,33 @@ export default function AppShell() {
     );
   }
 
+  function renameSession(id: string, title: string) {
+    setSessions((current) =>
+      current.map((session) =>
+        session.id === id
+          ? {
+              ...session,
+              title: title.trim() || session.title,
+              updatedAt: new Date().toISOString(),
+            }
+          : session,
+      ),
+    );
+  }
+
+  function deleteSession(id: string) {
+    setSessions((current) => {
+      const nextSessions = current.filter((session) => session.id !== id);
+      const ensuredSessions = nextSessions.length ? nextSessions : [createEmptySession()];
+
+      if (id === activeSessionId) {
+        setActiveSessionId(ensuredSessions[0].id);
+      }
+
+      return ensuredSessions;
+    });
+  }
+
   function handleNewChat() {
     const session = createEmptySession();
     setSessions((current) => [session, ...current]);
@@ -150,7 +178,6 @@ export default function AppShell() {
     setIsSending(true);
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
-    setSettings((current) => ({ ...current, status: "processing" }));
     updateActiveSession((session) => ({
       ...session,
       title: session.messages.length ? session.title : createSessionTitle(prompt),
@@ -178,20 +205,13 @@ export default function AppShell() {
             ? {
                 ...message,
                 content: response.content,
+                completedAt,
                 provider: response.provider,
                 model: response.model,
                 status: "done",
               }
             : message,
         ),
-      }));
-      setSettings((current) => ({
-        ...current,
-        status: "active",
-        provider: response.provider,
-        model: response.model,
-        requestsRemaining: response.usage.requestsRemaining,
-        restoreTime: response.usage.restoreTime,
       }));
     } catch (error) {
       const failedAt = new Date().toISOString();
@@ -210,14 +230,11 @@ export default function AppShell() {
             ? {
                 ...message,
                 content: wasStopped ? content : `ERROR\n${content}`,
+                completedAt: failedAt,
                 status: wasStopped ? "stopped" : "error",
               }
             : message,
         ),
-      }));
-      setSettings((current) => ({
-        ...current,
-        status: wasStopped ? "active" : "error",
       }));
     } finally {
       abortControllerRef.current = null;
@@ -230,23 +247,50 @@ export default function AppShell() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
-      <div className="grid min-h-screen grid-cols-1 border-zinc-800 bg-black text-zinc-100 lg:grid-cols-[300px_1fr]">
+    <div className="h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+      <div
+        className={`grid h-screen border-zinc-800 bg-black text-zinc-100 ${
+          isSidebarCollapsed
+            ? "grid-cols-[48px_1fr]"
+            : "grid-cols-1 lg:grid-cols-[300px_1fr]"
+        }`}
+      >
         <aside className="flex min-h-0 flex-col border-b border-zinc-800 bg-zinc-950 lg:h-screen lg:border-b-0 lg:border-r">
-          <ChatHistory
-            activeSessionId={activeSessionId}
-            sessions={sessions}
-            onNewChat={handleNewChat}
-            onSelectSession={setActiveSessionId}
-          />
-          <AiPanel
-            models={activeModels}
-            settings={settings}
-            onOpenInstructions={() => setIsInstructionsOpen(true)}
-            onSettingsChange={updateSetting}
-          />
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800 px-3">
+            {!isSidebarCollapsed ? (
+              <span className="font-mono text-xs font-semibold text-zinc-400">
+                Alaws lang.
+              </span>
+            ) : null}
+            <button
+              aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              className="grid h-8 w-8 place-items-center rounded-md border border-zinc-800 text-zinc-400 transition hover:border-zinc-600 hover:text-white"
+              onClick={() => setIsSidebarCollapsed((current) => !current)}
+              type="button"
+            >
+              {isSidebarCollapsed ? ">" : "<"}
+            </button>
+          </div>
+          {!isSidebarCollapsed ? (
+            <>
+              <ChatHistory
+                activeSessionId={activeSessionId}
+                sessions={sessions}
+                onDeleteSession={deleteSession}
+                onNewChat={handleNewChat}
+                onRenameSession={renameSession}
+                onSelectSession={setActiveSessionId}
+              />
+              <AiPanel
+                models={activeModels}
+                settings={settings}
+                onOpenInstructions={() => setIsInstructionsOpen(true)}
+                onSettingsChange={updateSetting}
+              />
+            </>
+          ) : null}
         </aside>
-        <main className="flex min-h-screen flex-col bg-black">
+        <main className="flex h-screen min-h-0 flex-col bg-black">
           <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-4 sm:px-6">
             <div>
               <h1 className="font-mono text-sm font-semibold tracking-normal text-zinc-100">

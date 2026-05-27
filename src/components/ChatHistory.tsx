@@ -8,16 +8,21 @@ type ChatHistoryProps = {
   sessions: ChatSession[];
   activeSessionId: string;
   onNewChat: () => void;
+  onDeleteSession: (id: string) => void;
+  onRenameSession: (id: string, title: string) => void;
   onSelectSession: (id: string) => void;
 };
 
 export default function ChatHistory({
   sessions,
   activeSessionId,
+  onDeleteSession,
   onNewChat,
+  onRenameSession,
   onSelectSession,
 }: ChatHistoryProps) {
   const [query, setQuery] = useState("");
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const filteredSessions = useMemo(
     () =>
       sessions.filter((session) =>
@@ -46,23 +51,79 @@ export default function ChatHistory({
         value={query}
       />
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto pr-1">
-        {filteredSessions.map((session) => (
-          <button
-            className={`w-full rounded-md border px-3 py-2 text-left transition ${
-              session.id === activeSessionId
-                ? "border-green-700 bg-green-950/40 text-green-100"
-                : "border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-100"
-            }`}
-            key={session.id}
-            onClick={() => onSelectSession(session.id)}
-            type="button"
-          >
-            <span className="block truncate font-mono text-sm">{session.title}</span>
-            <span className="mt-1 block text-xs text-zinc-600">
-              {formatTime(session.updatedAt)}
-            </span>
-          </button>
-        ))}
+        {filteredSessions.map((session) => {
+          const isMenuOpen = openMenuId === session.id;
+
+          return (
+            <div className="relative" key={session.id}>
+              <button
+                className={`w-full rounded-md border py-2 pl-3 pr-9 text-left transition ${
+                  session.id === activeSessionId
+                    ? "border-green-700 bg-green-950/40 text-green-100"
+                    : "border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-100"
+                }`}
+                onClick={() => onSelectSession(session.id)}
+                type="button"
+              >
+                <span className="block truncate font-mono text-sm">
+                  {session.title}
+                </span>
+                <span className="mt-1 block text-xs text-zinc-600">
+                  {formatTime(session.updatedAt)}
+                </span>
+              </button>
+              <button
+                aria-label={`Open actions for ${session.title}`}
+                className="absolute right-1.5 top-2 grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setOpenMenuId((current) =>
+                    current === session.id ? null : session.id,
+                  );
+                }}
+                type="button"
+              >
+                &gt;
+              </button>
+              {isMenuOpen ? (
+                <div className="absolute right-1 top-10 z-20 w-32 rounded-md border border-zinc-800 bg-zinc-950 p-1 shadow-xl">
+                  <button
+                    className="w-full rounded px-2 py-1.5 text-left text-xs text-zinc-300 hover:bg-zinc-900 hover:text-white"
+                    onClick={() => {
+                      const nextTitle = window.prompt("Rename chat", session.title);
+
+                      if (nextTitle !== null) {
+                        onRenameSession(session.id, nextTitle);
+                      }
+
+                      setOpenMenuId(null);
+                    }}
+                    type="button"
+                  >
+                    Rename
+                  </button>
+                  <button
+                    className="w-full rounded px-2 py-1.5 text-left text-xs text-red-300 hover:bg-red-950/40 hover:text-red-200"
+                    onClick={() => {
+                      const confirmed = window.confirm(
+                        `Delete "${session.title}"?`,
+                      );
+
+                      if (confirmed) {
+                        onDeleteSession(session.id);
+                      }
+
+                      setOpenMenuId(null);
+                    }}
+                    type="button"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </section>
   );

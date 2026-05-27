@@ -12,9 +12,6 @@ export const storageKeys = {
 export const defaultSettings: Settings = {
   provider: "nvidia",
   model: "nvidia/cosmos-reason2-8b",
-  requestsRemaining: 47,
-  restoreTime: "in 18m 24s",
-  status: "active",
   fallback: true,
 };
 

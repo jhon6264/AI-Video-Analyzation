@@ -138,12 +138,18 @@ function buildCandidates(request: AnalyzeRequest) {
     return [selected];
   }
 
+  const sameProviderFallbacks = fallbackOrder.filter(
+    (candidate) =>
+      candidate.provider === selected.provider && candidate.model !== selected.model,
+  );
+  const otherProviderFallbacks = fallbackOrder.filter(
+    (candidate) => candidate.provider !== selected.provider,
+  );
+
   return [
     selected,
-    ...fallbackOrder.filter(
-      (candidate) =>
-        candidate.provider !== selected.provider || candidate.model !== selected.model,
-    ),
+    ...sameProviderFallbacks,
+    ...otherProviderFallbacks,
   ];
 }
 

@@ -9,6 +9,7 @@ export type Message = {
   role: MessageRole;
   content: string;
   createdAt: string;
+  completedAt?: string;
   provider?: ProviderId;
   model?: string;
   status?: MessageStatus;
@@ -25,8 +26,5 @@ export type ChatSession = {
 export type Settings = {
   provider: ProviderId;
   model: string;
-  requestsRemaining: number;
-  restoreTime: string;
-  status: "active" | "processing" | "limited" | "error";
   fallback: boolean;
 };

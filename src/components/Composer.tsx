@@ -27,7 +27,7 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
 
   return (
     <form
-      className="border-t border-zinc-800 bg-black px-4 py-4 sm:px-6"
+      className="shrink-0 border-t border-zinc-800 bg-black px-4 py-4 sm:px-6"
       onSubmit={submit}
     >
       <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-md border border-zinc-800 bg-zinc-950 p-2 focus-within:border-zinc-600">
