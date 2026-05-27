@@ -23,6 +23,8 @@ type AiAttachment = {
 type Env = {
   NVIDIA_API_KEY: string;
   ALLOWED_ORIGIN?: string;
+  TRANSCRIBE_SERVICE_TOKEN?: string;
+  TRANSCRIBE_SERVICE_URL?: string;
   UPLOADS?: R2Bucket;
 };
 
@@ -213,13 +215,14 @@ async function streamNvidia(
   }
 
   const hasVideo = hasVideoInput(request.prompt, request.attachments);
+  const transcript = hasVideo ? await getAudioTranscript(request, env) : "";
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
     () => timeoutController.abort(),
     hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS,
   );
   const signal = combineAbortSignals(requestSignal, timeoutController.signal);
-  const body = buildNvidiaBody(request, hasVideo);
+  const body = buildNvidiaBody(request, hasVideo, transcript);
   const response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
@@ -252,7 +255,11 @@ async function streamNvidia(
   });
 }
 
-function buildNvidiaBody(request: AnalyzeRequest, hasVideo: boolean) {
+function buildNvidiaBody(
+  request: AnalyzeRequest,
+  hasVideo: boolean,
+  audioTranscript: string,
+) {
   return {
     model: request.model,
     messages: [
@@ -261,7 +268,7 @@ function buildNvidiaBody(request: AnalyzeRequest, hasVideo: boolean) {
         content: request.instructions,
       },
       ...request.history,
-      buildUserMessage(request),
+      buildUserMessage(request, audioTranscript),
     ],
     temperature: 0.2,
     max_tokens: hasVideo ? 1600 : 1200,
@@ -284,13 +291,14 @@ function buildNvidiaBody(request: AnalyzeRequest, hasVideo: boolean) {
   };
 }
 
-function buildUserMessage(request: AnalyzeRequest) {
+function buildUserMessage(request: AnalyzeRequest, audioTranscript = "") {
   const media = [...request.attachments, ...extractMediaUrls(request.prompt)].slice(0, 4);
+  const text = buildUserText(request.prompt, audioTranscript);
 
   if (!media.length) {
     return {
       role: "user",
-      content: request.prompt,
+      content: text,
     };
   }
 
@@ -299,7 +307,7 @@ function buildUserMessage(request: AnalyzeRequest) {
     content: [
       {
         type: "text",
-        text: request.prompt || DEFAULT_PROMPT,
+        text,
       },
       ...media.map((attachment) =>
         attachment.kind === "image"
@@ -314,6 +322,21 @@ function buildUserMessage(request: AnalyzeRequest) {
       ),
     ],
   };
+}
+
+function buildUserText(prompt: string, audioTranscript: string) {
+  const basePrompt = prompt || DEFAULT_PROMPT;
+
+  if (!audioTranscript) {
+    return basePrompt;
+  }
+
+  return `${basePrompt}
+
+Audio transcript from the video:
+${audioTranscript}
+
+Use both the visual video content and the audio transcript when answering.`;
 }
 
 function extractMediaUrls(prompt: string): AiAttachment[] {
@@ -353,6 +376,46 @@ function hasVideoInput(prompt: string, attachments: AiAttachment[]) {
     attachments.some((attachment) => attachment.kind === "video") ||
     extractMediaUrls(prompt).some((attachment) => attachment.kind === "video")
   );
+}
+
+async function getAudioTranscript(request: AnalyzeRequest, env: Env) {
+  const video = [...request.attachments, ...extractMediaUrls(request.prompt)].find(
+    (attachment) => attachment.kind === "video",
+  );
+
+  if (!video || !env.TRANSCRIBE_SERVICE_URL) {
+    return "";
+  }
+
+  const serviceUrl = env.TRANSCRIBE_SERVICE_URL.replace(/\/$/, "");
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (env.TRANSCRIBE_SERVICE_TOKEN) {
+    headers.Authorization = `Bearer ${env.TRANSCRIBE_SERVICE_TOKEN}`;
+  }
+
+  try {
+    const response = await fetch(`${serviceUrl}/transcribe`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        mediaUrl: video.url,
+        languageCode: "en-US",
+      }),
+      signal: AbortSignal.timeout(75_000),
+    });
+
+    if (!response.ok) {
+      return "";
+    }
+
+    const data = (await response.json()) as { transcript?: string };
+    return typeof data.transcript === "string" ? data.transcript.trim() : "";
+  } catch {
+    return "";
+  }
 }
 
 async function handleUpload(
