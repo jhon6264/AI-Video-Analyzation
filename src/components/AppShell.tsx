@@ -365,7 +365,7 @@ export default function AppShell() {
               <SidebarToggleIcon isExpanded={!isSidebarCollapsed} />
             </button>
           </div>
-          {!isSidebarCollapsed ? (
+          {(!isSidebarCollapsed || isMobileMenuOpen) ? (
             <>
               <ChatHistory
                 activeSessionId={activeSessionId}
@@ -392,10 +392,10 @@ export default function AppShell() {
             <div className="flex items-center gap-3">
               <button 
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
-                onClick={() => setIsMobileMenuOpen(true)}
+                onClick={() => setIsMobileMenuOpen((current) => !current)}
                 type="button"
               >
-                ☰
+                {isMobileMenuOpen ? "<" : ">"}
               </button>
               <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
                 Alaws lang.
