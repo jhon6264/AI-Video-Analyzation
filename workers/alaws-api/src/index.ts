@@ -48,6 +48,7 @@ const NVIDIA_CHAT_COMPLETIONS_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 const PROVIDER_TIMEOUT_MS = 45_000;
 const VIDEO_PROVIDER_TIMEOUT_MS = 90_000;
+const STREAM_INACTIVITY_TIMEOUT_MS = 45_000;
 const DEFAULT_PROMPT =
   "Analyze the attached media and answer naturally based on what you can see.";
 const VIDEO_MODEL_IDS = new Set([
@@ -56,17 +57,28 @@ const VIDEO_MODEL_IDS = new Set([
   "google/gemma-4-31b-it",
   "google/gemma-3n-e4b-it",
 ]);
-const MODEL_PROFILES: Record<
-  string,
-  { maxTokens?: number; timeoutMs?: number; videoFps?: number }
-> = {
+type ModelProfile = {
+  maxTokens?: number;
+  startupTimeoutMs?: number;
+  streamInactivityTimeoutMs?: number;
+  historyLimit?: number;
+  mediaHistoryLimit?: number;
+  videoFps?: number;
+};
+
+const MODEL_PROFILES: Record<string, ModelProfile> = {
   "deepseek-ai/deepseek-v4-pro": {
-    maxTokens: 700,
-    timeoutMs: 60_000,
+    maxTokens: 600,
+    startupTimeoutMs: 120_000,
+    streamInactivityTimeoutMs: 60_000,
+    historyLimit: 4,
   },
   "google/gemma-4-31b-it": {
-    maxTokens: 800,
-    timeoutMs: 75_000,
+    maxTokens: 700,
+    startupTimeoutMs: 150_000,
+    streamInactivityTimeoutMs: 60_000,
+    historyLimit: 4,
+    mediaHistoryLimit: 2,
     videoFps: 0.5,
   },
 };
@@ -82,7 +94,8 @@ const cleanErrors = {
   unauthorized: "NVIDIA rejected the API key or account access.",
   unavailable: "The selected NVIDIA model is unavailable on this endpoint.",
   rateLimited: "The selected NVIDIA model is rate limited right now.",
-  timeout: "The selected NVIDIA model took too long. Try a smaller model.",
+  timeout:
+    "The selected large model is still processing or queued. Try a shorter prompt or choose a faster model.",
   failed: "The selected NVIDIA model failed. Try again or choose another model.",
 };
 
@@ -228,34 +241,43 @@ async function streamNvidia(
 
   const hasVideo = hasVideoInput(request.prompt, request.attachments);
   const profile = getModelProfile(request.model);
-  const timeoutController = new AbortController();
-  const timeoutId = setTimeout(
-    () => timeoutController.abort(),
-    profile.timeoutMs ?? (hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS),
+  const providerController = new AbortController();
+  const startupTimeoutId = setTimeout(
+    () => providerController.abort(),
+    profile.startupTimeoutMs ??
+      (hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS),
   );
-  const signal = combineAbortSignals(requestSignal, timeoutController.signal);
+  const signal = combineAbortSignals(requestSignal, providerController.signal);
   const body = buildNvidiaBody(request, hasVideo, profile);
-  const response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-    signal,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+      signal,
+    });
+  } finally {
+    clearTimeout(startupTimeoutId);
+  }
 
   if (!response.ok) {
-    clearTimeout(timeoutId);
     throw new ProviderError(response.status);
   }
 
   if (!response.body) {
-    clearTimeout(timeoutId);
     throw new Error("NVIDIA stream body missing");
   }
 
-  const stream = createTextStream(response.body, timeoutId);
+  const stream = createTextStream(response.body, {
+    abortController: providerController,
+    inactivityTimeoutMs:
+      profile.streamInactivityTimeoutMs ?? STREAM_INACTIVITY_TIMEOUT_MS,
+  });
 
   return new Response(stream, {
     status: 200,
@@ -279,7 +301,7 @@ function buildNvidiaBody(
         role: "system",
         content: request.instructions,
       },
-      ...request.history,
+      ...getProfiledHistory(request.history, profile, hasMediaInput(request)),
       buildUserMessage(request),
     ],
     temperature: 0.2,
@@ -301,6 +323,18 @@ function buildNvidiaBody(
         }
       : {}),
   };
+}
+
+function getProfiledHistory(
+  history: AiMessage[],
+  profile: ModelProfile,
+  hasMedia: boolean,
+) {
+  const limit = hasMedia
+    ? profile.mediaHistoryLimit ?? profile.historyLimit
+    : profile.historyLimit;
+
+  return typeof limit === "number" ? history.slice(-limit) : history;
 }
 
 function buildUserMessage(request: AnalyzeRequest) {
@@ -373,6 +407,10 @@ function hasVideoInput(prompt: string, attachments: AiAttachment[]) {
     attachments.some((attachment) => attachment.kind === "video") ||
     extractMediaUrls(prompt).some((attachment) => attachment.kind === "video")
   );
+}
+
+function hasMediaInput(request: AnalyzeRequest) {
+  return request.attachments.length > 0 || extractMediaUrls(request.prompt).length > 0;
 }
 
 function getModelProfile(model: string) {
@@ -488,20 +526,56 @@ function safeFileName(name: string) {
 
 function createTextStream(
   providerBody: ReadableStream<Uint8Array>,
-  timeoutId: ReturnType<typeof setTimeout>,
+  options: {
+    abortController: AbortController;
+    inactivityTimeoutMs: number;
+  },
 ) {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const reader = providerBody.getReader();
   let buffer = "";
+  let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+  const clearInactivityTimeout = () => {
+    if (inactivityTimeoutId) {
+      clearTimeout(inactivityTimeoutId);
+      inactivityTimeoutId = null;
+    }
+  };
+
+  const resetInactivityTimeout = () => {
+    clearInactivityTimeout();
+    inactivityTimeoutId = setTimeout(() => {
+      options.abortController.abort();
+    }, options.inactivityTimeoutMs);
+  };
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
+      resetInactivityTimeout();
+
       while (true) {
-        const { done, value } = await reader.read();
+        let result: ReadableStreamReadResult<Uint8Array>;
+
+        try {
+          result = await reader.read();
+        } catch (error) {
+          clearInactivityTimeout();
+
+          if (error instanceof DOMException && error.name === "AbortError") {
+            controller.error(new Error(cleanErrors.timeout));
+            return;
+          }
+
+          controller.error(error);
+          return;
+        }
+
+        const { done, value } = result;
 
         if (done) {
-          clearTimeout(timeoutId);
+          clearInactivityTimeout();
           const remaining = flushSseBuffer(buffer);
 
           if (remaining) {
@@ -512,6 +586,7 @@ function createTextStream(
           return;
         }
 
+        resetInactivityTimeout();
         buffer += decoder.decode(value, { stream: true });
         const splitIndex = buffer.lastIndexOf("\n\n");
 
@@ -524,13 +599,14 @@ function createTextStream(
         const text = parseSseText(chunk);
 
         if (text) {
+          resetInactivityTimeout();
           controller.enqueue(encoder.encode(text));
           return;
         }
       }
     },
     cancel() {
-      clearTimeout(timeoutId);
+      clearInactivityTimeout();
       reader.cancel();
     },
   });

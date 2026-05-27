@@ -16,6 +16,7 @@ export const modelOptions: ModelOption[] = [
     icon: "google",
     vendor: "Google",
     role: "General NVIDIA model",
+    badges: ["large", "slower"],
     supportsImage: true,
     supportsVideo: true,
   },
@@ -32,6 +33,7 @@ export const modelOptions: ModelOption[] = [
     icon: "deepseek",
     vendor: "DeepSeek",
     role: "High-capability DeepSeek model",
+    badges: ["large", "slower"],
   },
   {
     id: "moonshotai/kimi-k2.6",

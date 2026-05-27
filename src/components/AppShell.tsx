@@ -128,6 +128,39 @@ export default function AppShell() {
   }, []);
 
   useEffect(() => {
+    const updateAppHeight = () => {
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      document.documentElement.style.setProperty(
+        "--app-height",
+        `${viewportHeight}px`,
+      );
+    };
+
+    updateAppHeight();
+    window.addEventListener("resize", updateAppHeight);
+    window.visualViewport?.addEventListener("resize", updateAppHeight);
+    window.visualViewport?.addEventListener("scroll", updateAppHeight);
+
+    return () => {
+      window.removeEventListener("resize", updateAppHeight);
+      window.visualViewport?.removeEventListener("resize", updateAppHeight);
+      window.visualViewport?.removeEventListener("scroll", updateAppHeight);
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "n") {
+        event.preventDefault();
+        handleNewChat();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
     if (hasHydrated && sessions.length) {
       saveSessions(sessions);
     }
@@ -327,9 +360,9 @@ export default function AppShell() {
   }
 
   return (
-    <div className="h-screen h-dvh overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+    <div className="overflow-hidden bg-[var(--background)] text-[var(--foreground)] [height:var(--app-height)]">
       <div
-        className={`flex h-screen h-dvh border-zinc-800 bg-black text-zinc-100 lg:grid ${
+        className={`flex border-zinc-800 bg-black text-zinc-100 [height:var(--app-height)] lg:grid ${
           isSidebarCollapsed
             ? "lg:grid-cols-[48px_1fr]"
             : "lg:grid-cols-[300px_1fr]"
@@ -387,7 +420,7 @@ export default function AppShell() {
             </>
           ) : null}
         </aside>
-        <main className="flex h-screen h-dvh min-h-0 flex-col bg-black">
+        <main className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-black [height:var(--app-height)]">
           <header className="flex h-12 shrink-0 items-center justify-between px-[clamp(1rem,3vw,1.5rem)]">
             <div className="flex items-center gap-3">
               <button 
@@ -398,7 +431,7 @@ export default function AppShell() {
                 {isMobileMenuOpen ? "<" : ">"}
               </button>
               <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
-                Alaws lage.
+                Alaws lageAnalyz.
               </h1>
             </div>
             <Image 

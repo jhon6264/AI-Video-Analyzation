@@ -1,6 +1,11 @@
 {
   "name": "Alaws lang",
   "short_name": "Alaws lang",
+  "description": "A mobile-ready AI chat app.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -16,6 +21,5 @@
     }
   ],
   "theme_color": "#000000",
-  "background_color": "#000000",
-  "display": "standalone"
+  "background_color": "#000000"
 }

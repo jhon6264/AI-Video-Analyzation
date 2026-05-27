@@ -3,6 +3,7 @@
 :root {
   --background: #000000;
   --foreground: #f4f4f5;
+  --app-height: 100dvh;
 }
 
 @theme inline {

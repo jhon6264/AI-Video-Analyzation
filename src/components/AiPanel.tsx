@@ -57,7 +57,7 @@ export default function AiPanel({
         <div className="relative">
           <span className="mb-1 block text-xs text-zinc-500">Model</span>
           <button
-            className="flex h-12 w-full items-center gap-2 rounded-md border border-zinc-800 bg-transparent px-2.5 text-left text-zinc-200 transition hover:border-zinc-600"
+            className="flex min-h-12 w-full items-center gap-2 rounded-md border border-zinc-800 bg-transparent px-2.5 py-2 text-left text-zinc-200 transition hover:border-zinc-600"
             onClick={() => setIsModelPickerOpen((current) => !current)}
             type="button"
           >
@@ -69,6 +69,18 @@ export default function AiPanel({
                 <span className="block truncate text-xs text-zinc-600">
                   {selectedModel?.vendor ?? "NVIDIA NIM"}
                 </span>
+                {selectedModel?.badges?.length ? (
+                  <span className="mt-1 flex gap-1">
+                    {selectedModel.badges.map((badge) => (
+                      <span
+                        className="rounded border border-zinc-800 px-1 font-mono text-[10px] uppercase text-zinc-500"
+                        key={badge}
+                      >
+                        {badge}
+                      </span>
+                    ))}
+                  </span>
+                ) : null}
             </span>
             <span className="font-mono text-xs text-zinc-500">v</span>
           </button>
@@ -104,6 +116,18 @@ export default function AiPanel({
                       <span className="block truncate text-xs text-zinc-600">
                         {model.vendor}
                       </span>
+                      {model.badges?.length ? (
+                        <span className="mt-1 flex gap-1">
+                          {model.badges.map((badge) => (
+                            <span
+                              className="rounded border border-zinc-800 px-1 font-mono text-[10px] uppercase text-zinc-500"
+                              key={badge}
+                            >
+                              {badge}
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
                     </span>
                   </button>
                 ))}

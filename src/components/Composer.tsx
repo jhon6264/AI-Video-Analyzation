@@ -271,7 +271,8 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
               disabled={isSending}
               onChange={(event) => setPrompt(event.target.value)}
               onKeyDown={(event) => {
-                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
                   submit();
                 }
               }}
