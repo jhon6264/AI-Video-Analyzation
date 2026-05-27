@@ -162,81 +162,81 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
       className="shrink-0 border-t border-zinc-800 bg-black px-[clamp(1rem,3vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)]"
       onSubmit={submit}
     >
-      <div className="mx-auto max-w-4xl rounded-md border border-zinc-800 bg-zinc-950 p-[clamp(0.5rem,1vw,0.75rem)] focus-within:border-zinc-600">
-        {attachments.length ? (
-          <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
-            {attachments.map((attachment) => (
-              <div
-                className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-zinc-800 bg-black"
-                key={attachment.id}
-              >
-                {attachment.kind === "image" && attachment.previewUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    alt={attachment.name}
-                    className="h-full w-full object-cover"
-                    src={attachment.previewUrl}
-                  />
-                ) : attachment.kind === "video" && attachment.previewUrl ? (
-                  <video
-                    className="h-full w-full object-cover"
-                    muted
-                    playsInline
-                    src={attachment.previewUrl}
-                  />
-                ) : (
-                  <div className="grid h-full place-items-center px-2 text-center font-mono text-[10px] text-zinc-500">
-                    {attachment.name}
-                  </div>
-                )}
-                <div className="absolute inset-x-0 bottom-0 bg-black/80 px-2 py-1 font-mono text-[10px] text-zinc-300">
-                  <p className="truncate">{attachment.name}</p>
-                  <p
-                    className={
-                      attachment.status === "error"
-                        ? "truncate text-red-300"
-                        : "text-zinc-500"
-                    }
-                  >
-                    {attachment.status === "uploading"
-                      ? "uploading..."
-                      : attachment.status === "ready"
-                        ? "ready"
-                        : attachment.error}
-                  </p>
-                </div>
-                <button
-                  aria-label={`Remove ${attachment.name}`}
-                  className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded border border-zinc-700 bg-black/80 text-xs text-zinc-300 transition hover:border-red-500 hover:text-red-200"
-                  onClick={() => removeAttachment(attachment.id)}
-                  type="button"
+      <div className="mx-auto max-w-4xl flex items-center gap-3">
+        <input
+          accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
+          aria-label="Upload image or video"
+          className="hidden"
+          multiple
+          onChange={handleFiles}
+          ref={fileInputRef}
+          type="file"
+        />
+        <button
+          aria-label="Attach image or video"
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-zinc-800 text-lg text-zinc-300 transition hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700"
+          disabled={isSending}
+          onClick={() => fileInputRef.current?.click()}
+          type="button"
+        >
+          +
+        </button>
+        <div className="flex-1 rounded-md border border-zinc-800 bg-zinc-950 p-[clamp(0.5rem,1vw,0.75rem)] focus-within:border-zinc-600">
+          {attachments.length ? (
+            <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+              {attachments.map((attachment) => (
+                <div
+                  className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-zinc-800 bg-black"
+                  key={attachment.id}
                 >
-                  x
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : null}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <input
-            accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
-            aria-label="Upload image or video"
-            className="hidden"
-            multiple
-            onChange={handleFiles}
-            ref={fileInputRef}
-            type="file"
-          />
-          <button
-            aria-label="Attach image or video"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-zinc-800 text-lg text-zinc-300 transition hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700 sm:block"
-            disabled={isSending}
-            onClick={() => fileInputRef.current?.click()}
-            type="button"
-          >
-            +
-          </button>
-          <div className="flex items-center gap-2 flex-1">
+                  {attachment.kind === "image" && attachment.previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      alt={attachment.name}
+                      className="h-full w-full object-cover"
+                      src={attachment.previewUrl}
+                    />
+                  ) : attachment.kind === "video" && attachment.previewUrl ? (
+                    <video
+                      className="h-full w-full object-cover"
+                      muted
+                      playsInline
+                      src={attachment.previewUrl}
+                    />
+                  ) : (
+                    <div className="grid h-full place-items-center px-2 text-center font-mono text-[10px] text-zinc-500">
+                      {attachment.name}
+                    </div>
+                  )}
+                  <div className="absolute inset-x-0 bottom-0 bg-black/80 px-2 py-1 font-mono text-[10px] text-zinc-300">
+                    <p className="truncate">{attachment.name}</p>
+                    <p
+                      className={
+                        attachment.status === "error"
+                          ? "truncate text-red-300"
+                          : "text-zinc-500"
+                      }
+                    >
+                      {attachment.status === "uploading"
+                        ? "uploading..."
+                        : attachment.status === "ready"
+                          ? "ready"
+                          : attachment.error}
+                    </p>
+                  </div>
+                  <button
+                    aria-label={`Remove ${attachment.name}`}
+                    className="absolute right-1 top-1 grid h-6 w-6 place-items-center rounded border border-zinc-700 bg-black/80 text-xs text-zinc-300 transition hover:border-red-500 hover:text-red-200"
+                    onClick={() => removeAttachment(attachment.id)}
+                    type="button"
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <div className="flex items-center gap-2">
             <textarea
               aria-label="Message Alaws"
               className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 font-mono text-[clamp(0.8rem,1.2vw,0.875rem)] leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
