@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { runAiTask } from "@/lib/api";
 import { createId, createSessionTitle } from "@/lib/format";
 import { getModelsForProvider } from "@/lib/models";
@@ -42,6 +42,7 @@ export default function AppShell() {
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -139,7 +140,7 @@ export default function AppShell() {
     const assistantMessage: Message = {
       id: assistantId,
       role: "assistant",
-      content: `> ${settings.taskMode} task queued`,
+      content: "",
       createdAt: now,
       provider: settings.provider,
       model: settings.model,
@@ -147,6 +148,8 @@ export default function AppShell() {
     };
 
     setIsSending(true);
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
     setSettings((current) => ({ ...current, status: "processing" }));
     updateActiveSession((session) => ({
       ...session,
@@ -161,9 +164,9 @@ export default function AppShell() {
         prompt,
         provider: settings.provider,
         model: settings.model,
-        taskMode: settings.taskMode,
         instructions,
         fallback: settings.fallback,
+        signal: abortController.signal,
       });
       const completedAt = new Date().toISOString();
 
@@ -192,8 +195,10 @@ export default function AppShell() {
       }));
     } catch (error) {
       const failedAt = new Date().toISOString();
-      const content =
-        error instanceof Error
+      const wasStopped = error instanceof Error && error.name === "AbortError";
+      const content = wasStopped
+        ? "> stopped"
+        : error instanceof Error
           ? error.message
           : "All providers are currently busy. Try again in a few minutes.";
 
@@ -204,16 +209,24 @@ export default function AppShell() {
           message.id === assistantId
             ? {
                 ...message,
-                content: `ERROR\n${content}`,
-                status: "error",
+                content: wasStopped ? content : `ERROR\n${content}`,
+                status: wasStopped ? "stopped" : "error",
               }
             : message,
         ),
       }));
-      setSettings((current) => ({ ...current, status: "error" }));
+      setSettings((current) => ({
+        ...current,
+        status: wasStopped ? "active" : "error",
+      }));
     } finally {
+      abortControllerRef.current = null;
       setIsSending(false);
     }
+  }
+
+  function handleStop() {
+    abortControllerRef.current?.abort();
   }
 
   return (
@@ -252,7 +265,7 @@ export default function AppShell() {
             </button>
           </header>
           <Transcript session={activeSession} />
-          <Composer isSending={isSending} onSubmit={handleSubmit} />
+          <Composer isSending={isSending} onStop={handleStop} onSubmit={handleSubmit} />
         </main>
       </div>
       {isInstructionsOpen ? (

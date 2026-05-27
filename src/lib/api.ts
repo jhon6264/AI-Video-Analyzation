@@ -1,13 +1,13 @@
-import type { ProviderId, TaskMode } from "@/types/chat";
+import type { ProviderId } from "@/types/chat";
 
 type AiTaskRequest = {
   sessionId: string;
   prompt: string;
   provider: ProviderId;
   model: string;
-  taskMode: TaskMode;
   instructions: string;
   fallback: boolean;
+  signal?: AbortSignal;
 };
 
 export type AnalyzeResponse = {
@@ -18,10 +18,14 @@ export type AnalyzeResponse = {
   usage: {
     requestsRemaining: number;
     restoreTime: string;
+    rateLimitSource?: "provider-header" | "estimated" | "unknown";
   };
 };
 
-export async function runAiTask(request: AiTaskRequest): Promise<AnalyzeResponse> {
+export async function runAiTask({
+  signal,
+  ...request
+}: AiTaskRequest): Promise<AnalyzeResponse> {
   const workerUrl = process.env.NEXT_PUBLIC_ALAWS_WORKER_URL;
 
   if (workerUrl) {
@@ -31,6 +35,7 @@ export async function runAiTask(request: AiTaskRequest): Promise<AnalyzeResponse
         "Content-Type": "application/json",
       },
       body: JSON.stringify(request),
+      signal,
     });
 
     if (!response.ok) {
@@ -45,52 +50,45 @@ export async function runAiTask(request: AiTaskRequest): Promise<AnalyzeResponse
     return response.json() as Promise<AnalyzeResponse>;
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  await wait(900, signal);
 
   return {
     ok: true,
     provider: request.provider,
     model: request.model,
-    content: buildLocalResponse(request.prompt, request.taskMode),
-    usage: {
-      requestsRemaining: 46,
-      restoreTime: "in 18m 24s",
-    },
-  };
-}
-
-function buildLocalResponse(prompt: string, taskMode: TaskMode) {
-  if (taskMode === "image") {
-    return `> image task queued
- prompt parsed
- provider bridge ready
-
-PROMPT
-${prompt}
-
-STATUS
-The UI can route image intent now. Add a provider-specific image generation endpoint to return actual image assets.`;
-  }
-
-  if (taskMode === "video") {
-    return `> video task queued
- prompt parsed
- provider bridge ready
-
-PROMPT
-${prompt}
-
-STATUS
-The UI can route video intent now. Add a provider-specific video generation endpoint to return actual video assets.`;
-  }
-
-  return `> response ready
+    content: `> response ready
  context parsed
  answer generated
 
 PROMPT
-${prompt}
+${request.prompt}
 
 NOTE
-Connect the Cloudflare Worker and provider keys to replace this local preview with model output.`;
+Connect the Cloudflare Worker and provider keys to replace this local preview with model output.`,
+    usage: {
+      requestsRemaining: 46,
+      restoreTime: "in 18m 24s",
+      rateLimitSource: "estimated",
+    },
+  };
+}
+
+function wait(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Request aborted", "AbortError"));
+      return;
+    }
+
+    const timeout = window.setTimeout(resolve, ms);
+
+    signal?.addEventListener(
+      "abort",
+      () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException("Request aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
 }

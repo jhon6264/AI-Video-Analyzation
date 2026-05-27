@@ -1,0 +1,4 @@
+git add .
+git commit -m "Add; Update some backend"
+git push
+npm run worker:deploy

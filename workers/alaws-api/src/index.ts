@@ -1,14 +1,23 @@
 type Provider = "nvidia" | "openrouter";
-type TaskMode = "text" | "image" | "video";
+type IntentKind =
+  | "chat"
+  | "image_understanding"
+  | "video_understanding"
+  | "image_generation"
+  | "video_generation";
 
 type AnalyzeRequest = {
   sessionId: string;
   prompt: string;
   provider: Provider;
   model: string;
-  taskMode: TaskMode;
   instructions: string;
   fallback: boolean;
+};
+
+type Intent = {
+  kind: IntentKind;
+  urls: string[];
 };
 
 type AnalyzeResponse = {
@@ -19,6 +28,7 @@ type AnalyzeResponse = {
   usage: {
     requestsRemaining: number;
     restoreTime: string;
+    rateLimitSource: "provider-header" | "estimated" | "unknown";
   };
 };
 
@@ -70,16 +80,19 @@ const worker = {
 
       for (const candidate of candidates) {
         try {
-          const content = await callProvider(candidate.provider, candidate.model, validated, env);
+          const providerResponse = await callProvider(
+            candidate.provider,
+            candidate.model,
+            validated,
+            env,
+            request.signal,
+          );
           const response: AnalyzeResponse = {
             ok: true,
             provider: candidate.provider,
             model: candidate.model,
-            content,
-            usage: {
-              requestsRemaining: 47,
-              restoreTime: "provider-managed",
-            },
+            content: providerResponse.content,
+            usage: providerResponse.usage,
           };
 
           return json(response, 200, corsHeaders);
@@ -113,14 +126,9 @@ function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
     prompt: body.prompt.trim(),
     provider: body.provider === "openrouter" ? "openrouter" : "nvidia",
     model: body.model?.trim() || "nvidia/cosmos-reason2-8b",
-    taskMode: normalizeTaskMode(body.taskMode),
     instructions: body.instructions?.trim() || "You are Alaws lang, a concise AI assistant.",
     fallback: body.fallback !== false,
   };
-}
-
-function normalizeTaskMode(taskMode: unknown): TaskMode {
-  return taskMode === "image" || taskMode === "video" ? taskMode : "text";
 }
 
 function buildCandidates(request: AnalyzeRequest) {
@@ -144,6 +152,7 @@ async function callProvider(
   model: string,
   request: AnalyzeRequest,
   env: Env,
+  signal: AbortSignal,
 ) {
   const endpoint =
     provider === "nvidia"
@@ -182,6 +191,7 @@ async function callProvider(
       temperature: 0.2,
       max_tokens: 1200,
     }),
+    signal,
   });
 
   if (!response.ok) {
@@ -197,22 +207,97 @@ async function callProvider(
     throw new Error(`${provider}:${model}:empty response`);
   }
 
-  return normalizeTerminalOutput(content);
+  return {
+    content: normalizeTerminalOutput(content),
+    usage: extractUsage(response),
+  };
 }
 
 function buildSystemPrompt(request: AnalyzeRequest) {
+  const intent = detectIntent(request.prompt);
   const taskGuidance = {
-    text: "The user is asking for normal text chat or assistance. Answer directly.",
-    image:
-      "The user is asking for image generation. If this endpoint cannot return image files, provide a polished image prompt, visual specification, and next-step guidance.",
-    video:
-      "The user is asking for video generation or video analysis. If a media URL is present, analyze it. If generation is requested and this endpoint cannot return video files, provide a polished video prompt, shot plan, and next-step guidance.",
-  } satisfies Record<TaskMode, string>;
+    chat: "The user is asking for normal text chat or assistance. Answer directly.",
+    image_understanding:
+      "The user provided or referenced an image. Discuss and analyze the image if the provider can access it; otherwise explain what is needed.",
+    video_understanding:
+      "The user provided or referenced a video. Discuss and analyze the video if the provider can access it; otherwise explain what is needed.",
+    image_generation:
+      "The user wants an image generated. If this endpoint cannot return image files, provide a polished image prompt, visual specification, and next-step guidance.",
+    video_generation:
+      "The user wants a video generated. If this endpoint cannot return video files, provide a polished video prompt, shot plan, and next-step guidance.",
+  } satisfies Record<IntentKind, string>;
 
   return `${request.instructions}
 
-Task mode: ${request.taskMode}
-${taskGuidance[request.taskMode]}`;
+Detected intent: ${intent.kind}
+Detected URLs: ${intent.urls.length ? intent.urls.join(", ") : "none"}
+${taskGuidance[intent.kind]}`;
+}
+
+function detectIntent(prompt: string): Intent {
+  const lowerPrompt = prompt.toLowerCase();
+  const urls = prompt.match(/https?:\/\/\S+/g) ?? [];
+  const hasImageUrl = urls.some((url) => /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(url));
+  const hasVideoUrl = urls.some((url) => /\.(mp4|mov|webm|m4v|avi)(\?|#|$)/i.test(url));
+  const asksImageGeneration =
+    /\b(generate|create|make|draw|render)\b/.test(lowerPrompt) &&
+    /\b(image|picture|photo|logo|poster|illustration)\b/.test(lowerPrompt);
+  const asksVideoGeneration =
+    /\b(generate|create|make|render)\b/.test(lowerPrompt) &&
+    /\b(video|clip|film|animation)\b/.test(lowerPrompt);
+
+  if (asksVideoGeneration) {
+    return { kind: "video_generation", urls };
+  }
+
+  if (asksImageGeneration) {
+    return { kind: "image_generation", urls };
+  }
+
+  if (hasVideoUrl) {
+    return { kind: "video_understanding", urls };
+  }
+
+  if (hasImageUrl) {
+    return { kind: "image_understanding", urls };
+  }
+
+  return { kind: "chat", urls };
+}
+
+function extractUsage(response: Response): AnalyzeResponse["usage"] {
+  const remaining = getNumericHeader(response.headers, [
+    "x-ratelimit-remaining",
+    "x-ratelimit-remaining-requests",
+    "x-ratelimit-requests-remaining",
+  ]);
+  const retryAfter = response.headers.get("retry-after");
+  const reset = response.headers.get("x-ratelimit-reset");
+
+  return {
+    requestsRemaining: remaining ?? 47,
+    restoreTime: retryAfter
+      ? `in ${retryAfter}s`
+      : reset
+        ? `at ${reset}`
+        : "provider-managed",
+    rateLimitSource: remaining === undefined && !retryAfter && !reset
+      ? "unknown"
+      : "provider-header",
+  };
+}
+
+function getNumericHeader(headers: Headers, names: string[]) {
+  for (const name of names) {
+    const value = headers.get(name);
+    const parsed = value ? Number.parseInt(value, 10) : Number.NaN;
+
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return undefined;
 }
 
 function normalizeTerminalOutput(content: string) {

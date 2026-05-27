@@ -29,23 +29,6 @@ export default function AiPanel({
       <p className="mb-3 text-xs font-medium uppercase text-zinc-500">AI</p>
       <div className="space-y-3 rounded-md border border-zinc-800 bg-black p-3">
         <label className="block">
-          <span className="mb-1 block text-xs text-zinc-500">Mode</span>
-          <select
-            className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"
-            onChange={(event) =>
-              onSettingsChange({
-                ...settings,
-                taskMode: event.target.value as Settings["taskMode"],
-              })
-            }
-            value={settings.taskMode}
-          >
-            <option value="text">Text chat</option>
-            <option value="image">Image generation</option>
-            <option value="video">Video generation / analysis</option>
-          </select>
-        </label>
-        <label className="block">
           <span className="mb-1 block text-xs text-zinc-500">Provider</span>
           <select
             className="h-9 w-full rounded-md border border-zinc-800 bg-zinc-950 px-2 text-sm text-zinc-100 outline-none focus:border-zinc-600"

@@ -5,9 +5,10 @@ import { FormEvent, useRef, useState } from "react";
 type ComposerProps = {
   isSending: boolean;
   onSubmit: (prompt: string) => void;
+  onStop: () => void;
 };
 
-export default function Composer({ isSending, onSubmit }: ComposerProps) {
+export default function Composer({ isSending, onStop, onSubmit }: ComposerProps) {
   const [prompt, setPrompt] = useState("");
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -46,12 +47,17 @@ export default function Composer({ isSending, onSubmit }: ComposerProps) {
           value={prompt}
         />
         <button
-          aria-label="Send"
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-zinc-800 text-lg text-zinc-200 transition hover:border-green-500 hover:text-green-300 disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700"
-          disabled={isSending || !prompt.trim()}
-          type="submit"
+          aria-label={isSending ? "Stop" : "Send"}
+          className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border text-lg transition ${
+            isSending
+              ? "border-red-900 text-red-300 hover:border-red-500 hover:text-red-200"
+              : "border-zinc-800 text-zinc-200 hover:border-green-500 hover:text-green-300 disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700"
+          }`}
+          disabled={!isSending && !prompt.trim()}
+          onClick={isSending ? onStop : undefined}
+          type={isSending ? "button" : "submit"}
         >
-          &rarr;
+          {isSending ? "x" : <span aria-hidden="true">&rarr;</span>}
         </button>
       </div>
     </form>

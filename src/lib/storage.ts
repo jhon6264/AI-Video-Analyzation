@@ -11,8 +11,7 @@ export const storageKeys = {
 
 export const defaultSettings: Settings = {
   provider: "nvidia",
-  model: "cosmos-reason2-8b",
-  taskMode: "text",
+  model: "nvidia/cosmos-reason2-8b",
   requestsRemaining: 47,
   restoreTime: "in 18m 24s",
   status: "active",
@@ -48,9 +47,14 @@ export function saveActiveSessionId(id: string) {
 }
 
 export function loadSettings() {
-  return {
+  const settings = {
     ...defaultSettings,
     ...safeParse<Partial<Settings>>(localStorage.getItem(storageKeys.settings), {}),
+  };
+
+  return {
+    ...settings,
+    model: normalizeStoredModel(settings.model),
   };
 }
 
@@ -64,4 +68,16 @@ export function loadInstructions() {
 
 export function saveInstructions(instructions: string) {
   localStorage.setItem(storageKeys.instructions, instructions);
+}
+
+function normalizeStoredModel(model: string) {
+  const legacyModelIds: Record<string, string> = {
+    "cosmos-reason2-8b": "nvidia/cosmos-reason2-8b",
+    "Qwen3.5-122B-A10B": "qwen/qwen3.5-122b-a10b",
+    "Qwen3.5-397B-A17B": "qwen/qwen3.5-397b-a17b",
+    "Gemma 4 31B IT": "google/gemma-4-31b-it",
+    "gemma-3n-e4b-it": "google/gemma-3n-e4b-it",
+  };
+
+  return legacyModelIds[model] ?? model;
 }
