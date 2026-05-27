@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { Message } from "@/types/chat";
+import MarkdownMessage from "./MarkdownMessage";
 
 type AssistantTerminalOutputProps = {
   message: Message;
@@ -53,13 +54,11 @@ export default function AssistantTerminalOutput({
 
   if (message.status === "running") {
     return (
-      <article className="max-w-4xl font-mono">
-        <div className="mb-3 text-sm leading-6 text-zinc-400">
+      <article className="max-w-4xl">
+        <div className="mb-3 font-mono text-sm leading-6 text-zinc-400">
           &gt; Answering {formatElapsed(runningElapsedMs)}
         </div>
-        <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">
-          {message.content}
-        </pre>
+        <MarkdownMessage content={message.content} />
       </article>
     );
   }
@@ -68,14 +67,12 @@ export default function AssistantTerminalOutput({
     const elapsedMs = getElapsedMs(message.createdAt, message.completedAt);
 
     return (
-      <article className="max-w-4xl font-mono">
-        <div className="mb-3 text-sm leading-6 text-zinc-400">
+      <article className="max-w-4xl">
+        <div className="mb-3 font-mono text-sm leading-6 text-zinc-400">
           &gt; Answered {formatElapsed(elapsedMs)} by{" "}
           <span className="text-red-400">{message.model ?? "AI model"}</span>
         </div>
-        <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">
-          {message.content}
-        </pre>
+        <MarkdownMessage content={message.content} />
       </article>
     );
   }
