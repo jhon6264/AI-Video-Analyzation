@@ -247,7 +247,7 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
                   submit();
                 }
               }}
-              placeholder="Message Alaws..."
+              placeholder="Ask Alaws lang"
               ref={textAreaRef}
               rows={2}
               value={prompt}

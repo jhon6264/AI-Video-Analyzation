@@ -36,7 +36,7 @@ export default function ChatHistory({
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-medium uppercase text-zinc-500">Chat History</p>
         <button
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 px-2 text-xs text-zinc-200 transition hover:border-green-500 hover:text-green-300"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-zinc-200 transition hover:text-green-300"
           onClick={onNewChat}
           type="button"
         >

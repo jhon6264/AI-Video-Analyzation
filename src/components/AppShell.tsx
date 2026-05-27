@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { runAiTask } from "@/lib/api";
 import { createId, createSessionTitle } from "@/lib/format";
 import { getModelById, modelOptions } from "@/lib/models";
+import Image from "next/image";
+import logo from "@/assets/alawslanglogo.png";
 import {
   defaultSettings,
   loadActiveSessionId,
@@ -350,25 +352,17 @@ export default function AppShell() {
           `}
         >
           <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800 px-3">
-            {!isSidebarCollapsed && !isMobileMenuOpen ? (
-              <span className="font-mono text-xs font-semibold text-zinc-400">
-                Alaws lang.
-              </span>
-            ) : !isSidebarCollapsed ? (
-              <span className="font-mono text-xs font-semibold text-zinc-400">
-                Alaws lang.
-              </span>
-            ) : null}
+            <div className="w-full" />
             <button
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              className="grid h-8 w-8 place-items-center rounded-md border border-zinc-800 text-zinc-400 transition hover:border-zinc-600 hover:text-white"
+              className="grid h-8 w-8 place-items-center rounded-md text-zinc-400 transition hover:text-white"
               onClick={() => {
                 setIsSidebarCollapsed((current) => !current);
                 if (window.innerWidth < 1024) setIsMobileMenuOpen(false);
               }}
               type="button"
             >
-              <SidebarToggleIcon isExpanded={!isSidebarCollapsed} />
+              {isSidebarCollapsed ? ">" : "<"}
             </button>
           </div>
           {!isSidebarCollapsed ? (
@@ -394,17 +388,24 @@ export default function AppShell() {
           ) : null}
         </aside>
         <main className="flex h-screen min-h-0 flex-col bg-black">
-          <header className="flex h-12 shrink-0 items-center justify-start gap-3 border-b border-zinc-800 px-[clamp(1rem,3vw,1.5rem)]">
-            <button 
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
-              onClick={() => setIsMobileMenuOpen(true)}
-              type="button"
-            >
-              ☰
-            </button>
-            <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
-              Alaws lang.
-            </h1>
+          <header className="flex h-12 shrink-0 items-center justify-between px-[clamp(1rem,3vw,1.5rem)]">
+            <div className="flex items-center gap-3">
+              <button 
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
+                onClick={() => setIsMobileMenuOpen(true)}
+                type="button"
+              >
+                ☰
+              </button>
+              <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
+                Alaws lang.
+              </h1>
+            </div>
+            <Image 
+              src={logo} 
+              alt="Alaws lang logo" 
+              className="h-8 w-8 object-contain"
+            />
           </header>
           <Transcript session={activeSession} />
           <Composer isSending={isSending} onStop={handleStop} onSubmit={handleSubmit} />
