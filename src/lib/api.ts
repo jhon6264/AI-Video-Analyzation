@@ -6,7 +6,6 @@ type AiTaskRequest = {
   provider: ProviderId;
   model: string;
   instructions: string;
-  fallback: boolean;
   signal?: AbortSignal;
 };
 

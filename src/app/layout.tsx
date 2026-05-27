@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Alaws lang.",
-  description: "Minimal CLI-style video analysis chat app.",
+  description: "Minimal CLI-style AI chat app.",
 };
 
 export default function RootLayout({

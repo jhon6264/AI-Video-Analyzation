@@ -26,5 +26,4 @@ export type ChatSession = {
 export type Settings = {
   provider: ProviderId;
   model: string;
-  fallback: boolean;
 };

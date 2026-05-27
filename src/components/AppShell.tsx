@@ -192,7 +192,6 @@ export default function AppShell() {
         provider: settings.provider,
         model: settings.model,
         instructions,
-        fallback: settings.fallback,
         signal: abortController.signal,
       });
       const completedAt = new Date().toISOString();

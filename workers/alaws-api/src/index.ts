@@ -1,10 +1,4 @@
 type Provider = "nvidia" | "openrouter";
-type IntentKind =
-  | "chat"
-  | "image_understanding"
-  | "video_understanding"
-  | "image_generation"
-  | "video_generation";
 
 type AnalyzeRequest = {
   sessionId: string;
@@ -12,12 +6,6 @@ type AnalyzeRequest = {
   provider: Provider;
   model: string;
   instructions: string;
-  fallback: boolean;
-};
-
-type Intent = {
-  kind: IntentKind;
-  urls: string[];
 };
 
 type AnalyzeResponse = {
@@ -38,19 +26,8 @@ type Env = {
   ALLOWED_ORIGIN?: string;
 };
 
-const fallbackOrder: Array<{ provider: Provider; model: string }> = [
-  { provider: "nvidia", model: "nvidia/cosmos-reason2-8b" },
-  { provider: "nvidia", model: "qwen/qwen3.5-122b-a10b" },
-  { provider: "nvidia", model: "qwen/qwen3.5-397b-a17b" },
-  { provider: "nvidia", model: "google/gemma-4-31b-it" },
-  { provider: "nvidia", model: "google/gemma-3n-e4b-it" },
-  { provider: "openrouter", model: "google/gemma-4-31b-it:free" },
-  { provider: "openrouter", model: "google/gemma-4-26b-a4b-it:free" },
-];
-
 const cleanErrors = {
-  busy: "All providers are currently busy. Try again in a few minutes.",
-  unsupported: "This model does not support the requested task. Try another model.",
+  busy: "The selected model is unavailable right now. Try again or choose another model.",
   invalid: "Send a prompt before running the model.",
 };
 
@@ -75,41 +52,26 @@ const worker = {
     try {
       const body = (await request.json()) as Partial<AnalyzeRequest>;
       const validated = validateAnalyzeRequest(body);
-      const candidates = buildCandidates(validated);
-      const failures: string[] = [];
+      const providerResponse = await callProvider(
+        validated.provider,
+        validated.model,
+        validated,
+        env,
+        request.signal,
+      );
+      const response: AnalyzeResponse = {
+        ok: true,
+        provider: validated.provider,
+        model: validated.model,
+        content: providerResponse.content,
+        usage: providerResponse.usage,
+      };
 
-      for (const candidate of candidates) {
-        try {
-          const providerResponse = await callProvider(
-            candidate.provider,
-            candidate.model,
-            validated,
-            env,
-            request.signal,
-          );
-          const response: AnalyzeResponse = {
-            ok: true,
-            provider: candidate.provider,
-            model: candidate.model,
-            content: providerResponse.content,
-            usage: providerResponse.usage,
-          };
-
-          return json(response, 200, corsHeaders);
-        } catch (error) {
-          failures.push(error instanceof Error ? error.message : "provider failed");
-
-          if (!validated.fallback) {
-            break;
-          }
-        }
-      }
-
-      console.log("Provider failures", failures);
-      return json({ ok: false, error: cleanErrors.busy }, 503, corsHeaders);
+      return json(response, 200, corsHeaders);
     } catch (error) {
-      const message = error instanceof Error ? error.message : cleanErrors.invalid;
-      return json({ ok: false, error: message }, 400, corsHeaders);
+      const message = error instanceof Error ? error.message : cleanErrors.busy;
+      const status = message === cleanErrors.invalid ? 400 : 503;
+      return json({ ok: false, error: message }, status, corsHeaders);
     }
   },
 };
@@ -126,31 +88,10 @@ function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
     prompt: body.prompt.trim(),
     provider: body.provider === "openrouter" ? "openrouter" : "nvidia",
     model: body.model?.trim() || "nvidia/cosmos-reason2-8b",
-    instructions: body.instructions?.trim() || "You are Alaws lang, a concise AI assistant.",
-    fallback: body.fallback !== false,
+    instructions:
+      body.instructions?.trim() ||
+      "You are Alaws lang, a natural AI assistant similar to ChatGPT.",
   };
-}
-
-function buildCandidates(request: AnalyzeRequest) {
-  const selected = { provider: request.provider, model: request.model };
-
-  if (!request.fallback) {
-    return [selected];
-  }
-
-  const sameProviderFallbacks = fallbackOrder.filter(
-    (candidate) =>
-      candidate.provider === selected.provider && candidate.model !== selected.model,
-  );
-  const otherProviderFallbacks = fallbackOrder.filter(
-    (candidate) => candidate.provider !== selected.provider,
-  );
-
-  return [
-    selected,
-    ...sameProviderFallbacks,
-    ...otherProviderFallbacks,
-  ];
 }
 
 async function callProvider(
@@ -187,7 +128,7 @@ async function callProvider(
       messages: [
         {
           role: "system",
-          content: buildSystemPrompt(request),
+          content: request.instructions,
         },
         {
           role: "user",
@@ -217,58 +158,6 @@ async function callProvider(
     content: normalizeTerminalOutput(content),
     usage: extractUsage(response),
   };
-}
-
-function buildSystemPrompt(request: AnalyzeRequest) {
-  const intent = detectIntent(request.prompt);
-  const taskGuidance = {
-    chat: "The user is asking for normal text chat or assistance. Answer directly.",
-    image_understanding:
-      "The user provided or referenced an image. Discuss and analyze the image if the provider can access it; otherwise explain what is needed.",
-    video_understanding:
-      "The user provided or referenced a video. Discuss and analyze the video if the provider can access it; otherwise explain what is needed.",
-    image_generation:
-      "The user wants an image generated. If this endpoint cannot return image files, provide a polished image prompt, visual specification, and next-step guidance.",
-    video_generation:
-      "The user wants a video generated. If this endpoint cannot return video files, provide a polished video prompt, shot plan, and next-step guidance.",
-  } satisfies Record<IntentKind, string>;
-
-  return `${request.instructions}
-
-Detected intent: ${intent.kind}
-Detected URLs: ${intent.urls.length ? intent.urls.join(", ") : "none"}
-${taskGuidance[intent.kind]}`;
-}
-
-function detectIntent(prompt: string): Intent {
-  const lowerPrompt = prompt.toLowerCase();
-  const urls = prompt.match(/https?:\/\/\S+/g) ?? [];
-  const hasImageUrl = urls.some((url) => /\.(png|jpe?g|webp|gif)(\?|#|$)/i.test(url));
-  const hasVideoUrl = urls.some((url) => /\.(mp4|mov|webm|m4v|avi)(\?|#|$)/i.test(url));
-  const asksImageGeneration =
-    /\b(generate|create|make|draw|render)\b/.test(lowerPrompt) &&
-    /\b(image|picture|photo|logo|poster|illustration)\b/.test(lowerPrompt);
-  const asksVideoGeneration =
-    /\b(generate|create|make|render)\b/.test(lowerPrompt) &&
-    /\b(video|clip|film|animation)\b/.test(lowerPrompt);
-
-  if (asksVideoGeneration) {
-    return { kind: "video_generation", urls };
-  }
-
-  if (asksImageGeneration) {
-    return { kind: "image_generation", urls };
-  }
-
-  if (hasVideoUrl) {
-    return { kind: "video_understanding", urls };
-  }
-
-  if (hasImageUrl) {
-    return { kind: "image_understanding", urls };
-  }
-
-  return { kind: "chat", urls };
 }
 
 function extractUsage(response: Response): AnalyzeResponse["usage"] {

@@ -12,7 +12,6 @@ export const storageKeys = {
 export const defaultSettings: Settings = {
   provider: "nvidia",
   model: "nvidia/cosmos-reason2-8b",
-  fallback: true,
 };
 
 function safeParse<T>(value: string | null, fallback: T): T {

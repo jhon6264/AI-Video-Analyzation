@@ -1,4 +1,4 @@
 git add .
-git commit -m "Add; Update some backend"
+git commit -m "Add: Update the UI and added some works"
 git push
 npm run worker:deploy
