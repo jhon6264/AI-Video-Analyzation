@@ -4,6 +4,7 @@ type AiTaskRequest = {
   model: string;
   instructions: string;
   history: AiMessage[];
+  attachments?: AiAttachment[];
   signal?: AbortSignal;
   onToken?: (token: string) => void;
 };
@@ -18,6 +19,19 @@ export type AnalyzeResponse = {
   provider: "nvidia";
   model: string;
   content: string;
+};
+
+export type AiAttachment = {
+  kind: "image" | "video";
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
+export type UploadResponse = {
+  ok: boolean;
+  attachment: AiAttachment;
 };
 
 export async function runAiTask({
@@ -76,6 +90,32 @@ Connect the Cloudflare Worker and provider keys to replace this local preview wi
     model: request.model,
     content,
   };
+}
+
+export async function uploadMedia(file: File): Promise<AiAttachment> {
+  const workerUrl = process.env.NEXT_PUBLIC_ALAWS_WORKER_URL;
+
+  if (!workerUrl) {
+    throw new Error("Connect the Cloudflare Worker before uploading media.");
+  }
+
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const response = await fetch(`${workerUrl.replace(/\/$/, "")}/api/upload`, {
+    method: "POST",
+    body: formData,
+  });
+
+  const data = (await response.json().catch(() => null)) as
+    | { error?: string; attachment?: AiAttachment }
+    | null;
+
+  if (!response.ok || !data?.attachment) {
+    throw new Error(data?.error ?? "Media upload failed.");
+  }
+
+  return data.attachment;
 }
 
 async function readTextStream(

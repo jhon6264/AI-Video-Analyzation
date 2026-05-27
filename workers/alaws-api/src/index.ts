@@ -4,6 +4,7 @@ type AnalyzeRequest = {
   model: string;
   instructions: string;
   history: AiMessage[];
+  attachments: AiAttachment[];
 };
 
 type AiMessage = {
@@ -11,17 +12,49 @@ type AiMessage = {
   content: string;
 };
 
+type AiAttachment = {
+  kind: "image" | "video";
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
 type Env = {
   NVIDIA_API_KEY: string;
   ALLOWED_ORIGIN?: string;
+  UPLOADS?: R2Bucket;
+};
+
+type R2Bucket = {
+  put(
+    key: string,
+    value: ReadableStream | ArrayBuffer | ArrayBufferView | string | Blob | null,
+    options?: {
+      httpMetadata?: { contentType?: string };
+      customMetadata?: Record<string, string>;
+    },
+  ): Promise<unknown>;
+  get(key: string): Promise<R2ObjectBody | null>;
+};
+
+type R2ObjectBody = {
+  body: ReadableStream<Uint8Array>;
+  size: number;
+  writeHttpMetadata(headers: Headers): void;
 };
 
 const NVIDIA_CHAT_COMPLETIONS_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 const PROVIDER_TIMEOUT_MS = 45_000;
+const DEFAULT_PROMPT =
+  "Analyze the attached media and answer naturally based on what you can see.";
 
 const cleanErrors = {
-  invalid: "Send a prompt before running the model.",
+  invalid: "Send a prompt or attach media before running the model.",
+  invalidUpload: "Upload a PNG, JPG, WebP, MP4, WebM, or MOV file.",
+  uploadTooLarge: "Images must be 10MB or smaller. Videos must be 50MB or smaller.",
+  missingBucket: "Cloudflare R2 upload bucket is not configured.",
   missingKey: "NVIDIA API key is not configured.",
   unauthorized: "NVIDIA rejected the API key or account access.",
   unavailable: "The selected NVIDIA model is unavailable on this endpoint.",
@@ -40,44 +73,68 @@ const worker = {
 
     const url = new URL(request.url);
 
-    if (url.pathname !== "/api/analyze") {
-      return json({ ok: false, error: "Not found" }, 404, corsHeaders);
+    if (url.pathname === "/api/upload") {
+      if (request.method !== "POST") {
+        return json({ ok: false, error: "Method not allowed" }, 405, corsHeaders);
+      }
+
+      try {
+        return await handleUpload(request, env, corsHeaders);
+      } catch {
+        return json({ ok: false, error: "Media upload failed." }, 500, corsHeaders);
+      }
     }
 
-    if (request.method !== "POST") {
-      return json({ ok: false, error: "Method not allowed" }, 405, corsHeaders);
+    if (url.pathname === "/api/media" || url.pathname.startsWith("/api/media/")) {
+      try {
+        return await handleMediaGet(request, env, corsHeaders);
+      } catch {
+        return json({ ok: false, error: "Media not available." }, 500, corsHeaders);
+      }
     }
 
-    try {
-      const body = (await request.json()) as Partial<AnalyzeRequest>;
-      const validated = validateAnalyzeRequest(body);
-      return await streamNvidia(validated, env, request.signal, corsHeaders);
-    } catch (error) {
-      const normalized = normalizeError(error);
-      return json(
-        { ok: false, error: normalized.message },
-        normalized.status,
-        corsHeaders,
-      );
+    if (url.pathname === "/api/analyze") {
+      if (request.method !== "POST") {
+        return json({ ok: false, error: "Method not allowed" }, 405, corsHeaders);
+      }
+
+      try {
+        const body = (await request.json()) as Partial<AnalyzeRequest>;
+        const validated = validateAnalyzeRequest(body);
+        return await streamNvidia(validated, env, request.signal, corsHeaders);
+      } catch (error) {
+        const normalized = normalizeError(error);
+        return json(
+          { ok: false, error: normalized.message },
+          normalized.status,
+          corsHeaders,
+        );
+      }
     }
+
+    return json({ ok: false, error: "Not found" }, 404, corsHeaders);
   },
 };
 
 export default worker;
 
 function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
-  if (!body.prompt?.trim()) {
+  const attachments = normalizeAttachments(body.attachments);
+  const prompt = body.prompt?.trim() ?? "";
+
+  if (!prompt && attachments.length === 0) {
     throw new Error(cleanErrors.invalid);
   }
 
   return {
     sessionId: body.sessionId ?? "session_unknown",
-    prompt: body.prompt.trim(),
+    prompt,
     model: body.model?.trim() || "google/gemma-3n-e4b-it",
     instructions:
       body.instructions?.trim() ||
       "You are Alaws lang, a natural AI assistant similar to ChatGPT.",
     history: normalizeHistory(body.history),
+    attachments,
   };
 }
 
@@ -100,6 +157,34 @@ function normalizeHistory(history: unknown): AiMessage[] {
     .map((message) => ({
       role: message.role,
       content: message.content.trim(),
+    }));
+}
+
+function normalizeAttachments(attachments: unknown): AiAttachment[] {
+  if (!Array.isArray(attachments)) {
+    return [];
+  }
+
+  return attachments
+    .filter(
+      (attachment): attachment is AiAttachment =>
+        typeof attachment === "object" &&
+        attachment !== null &&
+        ((attachment as AiAttachment).kind === "image" ||
+          (attachment as AiAttachment).kind === "video") &&
+        typeof (attachment as AiAttachment).url === "string" &&
+        /^https?:\/\//i.test((attachment as AiAttachment).url) &&
+        typeof (attachment as AiAttachment).name === "string" &&
+        typeof (attachment as AiAttachment).mimeType === "string" &&
+        typeof (attachment as AiAttachment).size === "number",
+    )
+    .slice(0, 4)
+    .map((attachment) => ({
+      kind: attachment.kind,
+      name: attachment.name.slice(0, 180),
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      url: attachment.url,
     }));
 }
 
@@ -130,10 +215,7 @@ async function streamNvidia(
           content: request.instructions,
         },
         ...request.history,
-        {
-          role: "user",
-          content: request.prompt,
-        },
+        buildUserMessage(request),
       ],
       temperature: 0.2,
       max_tokens: 1200,
@@ -162,6 +244,177 @@ async function streamNvidia(
       "Cache-Control": "no-cache",
     },
   });
+}
+
+function buildUserMessage(request: AnalyzeRequest) {
+  const media = [...request.attachments, ...extractMediaUrls(request.prompt)].slice(0, 4);
+
+  if (!media.length) {
+    return {
+      role: "user",
+      content: request.prompt,
+    };
+  }
+
+  return {
+    role: "user",
+    content: [
+      {
+        type: "text",
+        text: request.prompt || DEFAULT_PROMPT,
+      },
+      ...media.map((attachment) =>
+        attachment.kind === "image"
+          ? {
+              type: "image_url",
+              image_url: { url: attachment.url },
+            }
+          : {
+              type: "video_url",
+              video_url: { url: attachment.url },
+            },
+      ),
+    ],
+  };
+}
+
+function extractMediaUrls(prompt: string): AiAttachment[] {
+  const matches = prompt.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+
+  return matches
+    .map((rawUrl) => rawUrl.replace(/[),.]+$/, ""))
+    .map((url): AiAttachment | null => {
+      let pathname = "";
+
+      try {
+        pathname = new URL(url).pathname.toLowerCase();
+      } catch {
+        return null;
+      }
+
+      const image = /\.(png|jpe?g|webp)$/i.test(pathname);
+      const video = /\.(mp4|webm|mov)$/i.test(pathname);
+
+      if (!image && !video) {
+        return null;
+      }
+
+      return {
+        kind: image ? "image" : "video",
+        name: pathname.split("/").pop() || url,
+        mimeType: image ? "image/*" : "video/*",
+        size: 0,
+        url,
+      };
+    })
+    .filter((attachment): attachment is AiAttachment => Boolean(attachment));
+}
+
+async function handleUpload(
+  request: Request,
+  env: Env,
+  corsHeaders: HeadersInit,
+) {
+  if (!env.UPLOADS) {
+    return json({ ok: false, error: cleanErrors.missingBucket }, 500, corsHeaders);
+  }
+
+  const formData = await request.formData();
+  const file = formData.get("file");
+
+  if (!(file instanceof File) || !isAllowedMedia(file.type)) {
+    return json({ ok: false, error: cleanErrors.invalidUpload }, 400, corsHeaders);
+  }
+
+  const kind = file.type.startsWith("video/") ? "video" : "image";
+  const maxSize = kind === "image" ? 10 * 1024 * 1024 : 50 * 1024 * 1024;
+
+  if (file.size > maxSize) {
+    return json({ ok: false, error: cleanErrors.uploadTooLarge }, 413, corsHeaders);
+  }
+
+  const key = `uploads/${crypto.randomUUID()}-${safeFileName(file.name)}`;
+  await env.UPLOADS.put(key, file.stream(), {
+    httpMetadata: { contentType: file.type },
+    customMetadata: {
+      originalName: file.name,
+      kind,
+    },
+  });
+
+  const mediaUrl = new URL(request.url);
+  mediaUrl.pathname = `/api/media/${key}`;
+  mediaUrl.search = "";
+
+  return json(
+    {
+      ok: true,
+      attachment: {
+        kind,
+        name: file.name,
+        mimeType: file.type,
+        size: file.size,
+        url: mediaUrl.toString(),
+      },
+    },
+    200,
+    corsHeaders,
+  );
+}
+
+async function handleMediaGet(
+  request: Request,
+  env: Env,
+  corsHeaders: HeadersInit,
+) {
+  if (request.method !== "GET") {
+    return json({ ok: false, error: "Method not allowed" }, 405, corsHeaders);
+  }
+
+  if (!env.UPLOADS) {
+    return json({ ok: false, error: cleanErrors.missingBucket }, 500, corsHeaders);
+  }
+
+  const url = new URL(request.url);
+  const key = decodeURIComponent(url.pathname.replace(/^\/api\/media\/?/, ""));
+
+  if (!key.startsWith("uploads/")) {
+    return json({ ok: false, error: "Not found" }, 404, corsHeaders);
+  }
+
+  const object = await env.UPLOADS.get(key);
+
+  if (!object) {
+    return json({ ok: false, error: "Not found" }, 404, corsHeaders);
+  }
+
+  const headers = new Headers(corsHeaders);
+  object.writeHttpMetadata(headers);
+  headers.set("Cache-Control", "public, max-age=86400");
+  headers.set("Content-Length", String(object.size));
+
+  return new Response(object.body, { headers });
+}
+
+function isAllowedMedia(mimeType: string) {
+  return [
+    "image/png",
+    "image/jpeg",
+    "image/webp",
+    "video/mp4",
+    "video/webm",
+    "video/quicktime",
+  ].includes(mimeType);
+}
+
+function safeFileName(name: string) {
+  return (
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80) || "media"
+  );
 }
 
 function createTextStream(
@@ -311,7 +564,7 @@ function buildCorsHeaders(request: Request, env: Env) {
 
   return {
     "Access-Control-Allow-Origin": responseOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
   };

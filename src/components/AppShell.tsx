@@ -15,7 +15,7 @@ import {
   saveSessions,
   saveSettings,
 } from "@/lib/storage";
-import type { ChatSession, Message, Settings } from "@/types/chat";
+import type { ChatAttachment, ChatSession, Message, Settings } from "@/types/chat";
 import AiPanel from "./AiPanel";
 import ChatHistory from "./ChatHistory";
 import Composer from "./Composer";
@@ -175,17 +175,19 @@ export default function AppShell() {
     setActiveSessionId(session.id);
   }
 
-  async function handleSubmit(prompt: string) {
+  async function handleSubmit(prompt: string, attachments: ChatAttachment[]) {
     if (!activeSession || isSending) {
       return;
     }
 
     const now = new Date().toISOString();
+    const titlePrompt = prompt || attachments[0]?.name || "Media analysis";
     const userMessage: Message = {
       id: createId("msg"),
       role: "user",
       content: prompt,
       createdAt: now,
+      attachments,
       status: "done",
     };
     const assistantId = createId("msg");
@@ -204,7 +206,7 @@ export default function AppShell() {
     abortControllerRef.current = abortController;
     updateActiveSession((session) => ({
       ...session,
-      title: session.messages.length ? session.title : createSessionTitle(prompt),
+      title: session.messages.length ? session.title : createSessionTitle(titlePrompt),
       updatedAt: now,
       messages: [...session.messages, userMessage, assistantMessage],
     }));
@@ -215,6 +217,7 @@ export default function AppShell() {
         prompt,
         model: settings.model,
         instructions,
+        attachments,
         history: getRecentHistory(activeSession),
         signal: abortController.signal,
         onToken: (token) => {

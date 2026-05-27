@@ -6,6 +6,12 @@
   "vars": {
     "ALLOWED_ORIGIN": "https://alawslang.vercel.app"
   },
+  "r2_buckets": [
+    {
+      "binding": "UPLOADS",
+      "bucket_name": "alaws-uploads"
+    }
+  ],
   "secrets": {
     "required": ["NVIDIA_API_KEY"]
   }

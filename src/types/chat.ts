@@ -4,12 +4,24 @@ export type MessageStatus = "queued" | "running" | "done" | "error" | "stopped";
 
 export type ProviderId = "nvidia";
 
+export type AttachmentKind = "image" | "video";
+
+export type ChatAttachment = {
+  id: string;
+  kind: AttachmentKind;
+  name: string;
+  mimeType: string;
+  size: number;
+  url: string;
+};
+
 export type Message = {
   id: string;
   role: MessageRole;
   content: string;
   createdAt: string;
   completedAt?: string;
+  attachments?: ChatAttachment[];
   provider?: ProviderId;
   model?: string;
   status?: MessageStatus;
