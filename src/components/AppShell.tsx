@@ -431,7 +431,7 @@ export default function AppShell() {
                 {isMobileMenuOpen ? "<" : ">"}
               </button>
               <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
-                Alaws lageAnalyz.
+                Alaws lage.
               </h1>
             </div>
             <Image 

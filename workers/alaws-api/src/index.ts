@@ -68,18 +68,22 @@ type ModelProfile = {
 
 const MODEL_PROFILES: Record<string, ModelProfile> = {
   "deepseek-ai/deepseek-v4-pro": {
-    maxTokens: 600,
+    maxTokens: 10_000,
     startupTimeoutMs: 120_000,
     streamInactivityTimeoutMs: 60_000,
     historyLimit: 4,
   },
   "google/gemma-4-31b-it": {
-    maxTokens: 700,
+    maxTokens: 10_000,
     startupTimeoutMs: 150_000,
     streamInactivityTimeoutMs: 60_000,
     historyLimit: 4,
     mediaHistoryLimit: 2,
     videoFps: 0.5,
+  },
+  "moonshotai/kimi-k2.6": {
+    maxTokens: 10_000,
+    historyLimit: 4,
   },
 };
 

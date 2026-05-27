@@ -33,9 +33,13 @@ export default function Transcript({ session }: TranscriptProps) {
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-[clamp(1rem,2vh,1.25rem)]">
         {!session?.messages.length ? (
           <div className="grid min-h-[45vh] place-items-center text-center">
-            <div>
-              <pre className="font-mono text-[clamp(1.4rem,5vw,3.5rem)] font-semibold leading-none tracking-normal text-zinc-100">
-                Alaws Lage
+            <div className="w-full max-w-full">
+              <pre className="mx-auto max-w-full overflow-hidden whitespace-pre font-mono text-[clamp(0.34rem,1.52vw,1rem)] font-semibold leading-[1.05] tracking-normal text-zinc-100">
+{String.raw`   ___    __                         __
+  / _ |  / / ___ __    __ ___  ___   / / ___ _ ___ _ ___
+ / __ | / / / _ \\ \ /\/ // _ \(_-<  / / / _  // _  // -_)
+/_/ |_|/_/  \___/ \_/\_/ \___//___/ /_/  \_,_/ \_, / \__/
+                                               /___/`}
               </pre>
               <p className="mt-4 text-sm text-zinc-500">Ask anything</p>
             </div>
