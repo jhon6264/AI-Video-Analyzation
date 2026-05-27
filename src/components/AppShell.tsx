@@ -327,10 +327,10 @@ export default function AppShell() {
   return (
     <div className="h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <div
-        className={`grid h-screen border-zinc-800 bg-black text-zinc-100 ${
+        className={`flex h-screen border-zinc-800 bg-black text-zinc-100 lg:grid ${
           isSidebarCollapsed
-            ? "grid-cols-[48px_1fr]"
-            : "grid-cols-1 lg:grid-cols-[300px_1fr]"
+            ? "lg:grid-cols-[48px_1fr]"
+            : "lg:grid-cols-[300px_1fr]"
         }`}
       >
         {/* Mobile Overlay */}

@@ -217,7 +217,7 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
             ))}
           </div>
         ) : null}
-        <div className="flex items-end gap-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <input
             accept="image/png,image/jpeg,image/webp,video/mp4,video/webm,video/quicktime"
             aria-label="Upload image or video"
@@ -229,41 +229,43 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
           />
           <button
             aria-label="Attach image or video"
-            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-zinc-800 text-lg text-zinc-300 transition hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-zinc-800 text-lg text-zinc-300 transition hover:border-zinc-600 hover:text-white disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700 sm:block"
             disabled={isSending}
             onClick={() => fileInputRef.current?.click()}
             type="button"
           >
             +
           </button>
-           <textarea
-             aria-label="Message Alaws"
-             className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 font-mono text-[clamp(0.8rem,1.2vw,0.875rem)] leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
-             disabled={isSending}
-            onChange={(event) => setPrompt(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-                submit();
-              }
-            }}
-            placeholder="Message Alaws..."
-            ref={textAreaRef}
-            rows={2}
-            value={prompt}
-          />
-          <button
-            aria-label={isSending ? "Stop" : "Send"}
-            className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border text-lg transition ${
-              isSending
-                ? "border-red-900 text-red-300 hover:border-red-500 hover:text-red-200"
-                : "border-zinc-800 text-zinc-200 hover:border-green-500 hover:text-green-300 disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700"
-            }`}
-            disabled={!isSending && !canSubmit}
-            onClick={isSending ? onStop : undefined}
-            type={isSending ? "button" : "submit"}
-          >
-            {isSending ? "x" : <span aria-hidden="true">&rarr;</span>}
-          </button>
+          <div className="flex items-center gap-2 flex-1">
+            <textarea
+              aria-label="Message Alaws"
+              className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 font-mono text-[clamp(0.8rem,1.2vw,0.875rem)] leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
+              disabled={isSending}
+              onChange={(event) => setPrompt(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                  submit();
+                }
+              }}
+              placeholder="Message Alaws..."
+              ref={textAreaRef}
+              rows={2}
+              value={prompt}
+            />
+            <button
+              aria-label={isSending ? "Stop" : "Send"}
+              className={`grid h-10 w-10 shrink-0 place-items-center rounded-md border text-lg transition ${
+                isSending
+                  ? "border-red-900 text-red-300 hover:border-red-500 hover:text-red-200"
+                  : "border-zinc-800 text-zinc-200 hover:border-green-500 hover:text-green-300 disabled:cursor-not-allowed disabled:border-zinc-900 disabled:text-zinc-700"
+              }`}
+              disabled={!isSending && !canSubmit}
+              onClick={isSending ? onStop : undefined}
+              type={isSending ? "button" : "submit"}
+            >
+              {isSending ? "x" : <span aria-hidden="true">&rarr;</span>}
+            </button>
+          </div>
         </div>
       </div>
     </form>
