@@ -67,7 +67,9 @@ export default function AiPanel({
                 {selectedModel?.label ?? "Select model"}
               </span>
               <span className="block truncate text-xs text-zinc-600">
-                {selectedModel?.vendor ?? "NVIDIA NIM"}
+                {selectedModel?.supportsVideo
+                  ? `${selectedModel.vendor} · video`
+                  : selectedModel?.vendor ?? "NVIDIA NIM"}
               </span>
             </span>
             <span className="font-mono text-xs text-zinc-500">v</span>
@@ -102,7 +104,7 @@ export default function AiPanel({
                     <span className="min-w-0">
                       <span className="block truncate text-sm">{model.label}</span>
                       <span className="block truncate text-xs text-zinc-600">
-                        {model.vendor}
+                        {model.supportsVideo ? `${model.vendor} · video` : model.vendor}
                       </span>
                     </span>
                   </button>

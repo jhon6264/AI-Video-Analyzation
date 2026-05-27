@@ -4,4 +4,6 @@ export type ModelOption = {
   icon: "deepseek" | "google" | "kimi" | "meta" | "mistral" | "qwen";
   vendor: string;
   role: string;
+  supportsImage?: boolean;
+  supportsVideo?: boolean;
 };

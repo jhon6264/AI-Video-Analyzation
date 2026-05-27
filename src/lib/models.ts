@@ -7,6 +7,8 @@ export const modelOptions: ModelOption[] = [
     icon: "google",
     vendor: "Google",
     role: "Fast general NVIDIA model",
+    supportsImage: true,
+    supportsVideo: true,
   },
   {
     id: "google/gemma-4-31b-it",
@@ -14,6 +16,8 @@ export const modelOptions: ModelOption[] = [
     icon: "google",
     vendor: "Google",
     role: "General NVIDIA model",
+    supportsImage: true,
+    supportsVideo: true,
   },
   {
     id: "deepseek-ai/deepseek-v4-flash",
@@ -56,6 +60,7 @@ export const modelOptions: ModelOption[] = [
     icon: "meta",
     vendor: "Meta",
     role: "Vision-capable NVIDIA model",
+    supportsImage: true,
   },
   {
     id: "qwen/qwen3.5-122b-a10b",
@@ -63,6 +68,8 @@ export const modelOptions: ModelOption[] = [
     icon: "qwen",
     vendor: "Qwen",
     role: "Strong Qwen model",
+    supportsImage: true,
+    supportsVideo: true,
   },
   {
     id: "qwen/qwen3.5-397b-a17b",
@@ -70,6 +77,8 @@ export const modelOptions: ModelOption[] = [
     icon: "qwen",
     vendor: "Qwen",
     role: "High-capability Qwen model",
+    supportsImage: true,
+    supportsVideo: true,
   },
 ];
 

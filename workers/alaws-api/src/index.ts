@@ -47,8 +47,15 @@ type R2ObjectBody = {
 const NVIDIA_CHAT_COMPLETIONS_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
 const PROVIDER_TIMEOUT_MS = 45_000;
+const VIDEO_PROVIDER_TIMEOUT_MS = 90_000;
 const DEFAULT_PROMPT =
   "Analyze the attached media and answer naturally based on what you can see.";
+const VIDEO_MODEL_IDS = new Set([
+  "qwen/qwen3.5-397b-a17b",
+  "qwen/qwen3.5-122b-a10b",
+  "google/gemma-4-31b-it",
+  "google/gemma-3n-e4b-it",
+]);
 
 const cleanErrors = {
   invalid: "Send a prompt or attach media before running the model.",
@@ -56,6 +63,8 @@ const cleanErrors = {
   uploadTooLarge: "Images must be 10MB or smaller. Videos must be 50MB or smaller.",
   missingBucket: "Cloudflare R2 upload bucket is not configured.",
   missingKey: "NVIDIA API key is not configured.",
+  unsupportedVideoModel:
+    "Choose Qwen3.5, Gemma 4 31B, or Gemma 3n for video analysis.",
   unauthorized: "NVIDIA rejected the API key or account access.",
   unavailable: "The selected NVIDIA model is unavailable on this endpoint.",
   rateLimited: "The selected NVIDIA model is rate limited right now.",
@@ -121,15 +130,20 @@ export default worker;
 function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
   const attachments = normalizeAttachments(body.attachments);
   const prompt = body.prompt?.trim() ?? "";
+  const model = body.model?.trim() || "google/gemma-3n-e4b-it";
 
   if (!prompt && attachments.length === 0) {
     throw new Error(cleanErrors.invalid);
   }
 
+  if (hasVideoInput(prompt, attachments) && !VIDEO_MODEL_IDS.has(model)) {
+    throw new Error(cleanErrors.unsupportedVideoModel);
+  }
+
   return {
     sessionId: body.sessionId ?? "session_unknown",
     prompt,
-    model: body.model?.trim() || "google/gemma-3n-e4b-it",
+    model,
     instructions:
       body.instructions?.trim() ||
       "You are Alaws lang, a natural AI assistant similar to ChatGPT.",
@@ -198,29 +212,21 @@ async function streamNvidia(
     throw new Error(cleanErrors.missingKey);
   }
 
+  const hasVideo = hasVideoInput(request.prompt, request.attachments);
   const timeoutController = new AbortController();
-  const timeoutId = setTimeout(() => timeoutController.abort(), PROVIDER_TIMEOUT_MS);
+  const timeoutId = setTimeout(
+    () => timeoutController.abort(),
+    hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS,
+  );
   const signal = combineAbortSignals(requestSignal, timeoutController.signal);
+  const body = buildNvidiaBody(request, hasVideo);
   const response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      model: request.model,
-      messages: [
-        {
-          role: "system",
-          content: request.instructions,
-        },
-        ...request.history,
-        buildUserMessage(request),
-      ],
-      temperature: 0.2,
-      max_tokens: 1200,
-      stream: true,
-    }),
+    body: JSON.stringify(body),
     signal,
   });
 
@@ -244,6 +250,38 @@ async function streamNvidia(
       "Cache-Control": "no-cache",
     },
   });
+}
+
+function buildNvidiaBody(request: AnalyzeRequest, hasVideo: boolean) {
+  return {
+    model: request.model,
+    messages: [
+      {
+        role: "system",
+        content: request.instructions,
+      },
+      ...request.history,
+      buildUserMessage(request),
+    ],
+    temperature: 0.2,
+    max_tokens: hasVideo ? 1600 : 1200,
+    stream: true,
+    ...(hasVideo
+      ? {
+          media_io_kwargs: {
+            video: {
+              fps: 1.0,
+            },
+          },
+          mm_processor_kwargs: {
+            size: {
+              shortest_edge: 1568,
+              longest_edge: 262144,
+            },
+          },
+        }
+      : {}),
+  };
 }
 
 function buildUserMessage(request: AnalyzeRequest) {
@@ -308,6 +346,13 @@ function extractMediaUrls(prompt: string): AiAttachment[] {
       };
     })
     .filter((attachment): attachment is AiAttachment => Boolean(attachment));
+}
+
+function hasVideoInput(prompt: string, attachments: AiAttachment[]) {
+  return (
+    attachments.some((attachment) => attachment.kind === "video") ||
+    extractMediaUrls(prompt).some((attachment) => attachment.kind === "video")
+  );
 }
 
 async function handleUpload(
@@ -513,6 +558,10 @@ function normalizeError(error: unknown) {
 
   if (error instanceof Error && error.message === cleanErrors.missingKey) {
     return { status: 500, message: cleanErrors.missingKey };
+  }
+
+  if (error instanceof Error && error.message === cleanErrors.unsupportedVideoModel) {
+    return { status: 400, message: cleanErrors.unsupportedVideoModel };
   }
 
   if (error instanceof DOMException && error.name === "AbortError") {

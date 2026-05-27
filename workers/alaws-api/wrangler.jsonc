@@ -1,18 +1,25 @@
 {
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "alaws-lang-api",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-05-27",
-  "vars": {
-    "ALLOWED_ORIGIN": "https://alawslang.vercel.app"
-  },
-  "r2_buckets": [
-    {
-      "binding": "UPLOADS",
-      "bucket_name": "alaws-uploads"
-    }
-  ],
-  "secrets": {
-    "required": ["NVIDIA_API_KEY"]
-  }
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "alaws-lang-api",
+	"main": "src/index.ts",
+	"compatibility_date": "2026-05-27",
+	"vars": {
+		"ALLOWED_ORIGIN": "https://alawslang.vercel.app"
+	},
+	"r2_buckets": [
+		{
+			"binding": "UPLOADS",
+			"bucket_name": "alaws-uploads"
+		},
+		{
+			"bucket_name": "alaws-uploads",
+			"binding": "alaws_uploads",
+			"remote": true
+		}
+	],
+	"secrets": {
+		"required": [
+			"NVIDIA_API_KEY"
+		]
+	}
 }

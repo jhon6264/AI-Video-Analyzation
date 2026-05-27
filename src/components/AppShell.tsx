@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { runAiTask } from "@/lib/api";
 import { createId, createSessionTitle } from "@/lib/format";
-import { modelOptions } from "@/lib/models";
+import { getModelById, modelOptions } from "@/lib/models";
 import {
   defaultSettings,
   loadActiveSessionId,
@@ -47,6 +47,50 @@ function getRecentHistory(session: ChatSession) {
       role: message.role as "user" | "assistant",
       content: message.content,
     }));
+}
+
+function getSupportedModelForAttachments(
+  selectedModelId: string,
+  attachments: ChatAttachment[],
+  prompt = "",
+) {
+  const selectedModel = getModelById(selectedModelId) ?? modelOptions[0];
+  const promptMedia = extractMediaKinds(prompt);
+  const hasVideo =
+    attachments.some((attachment) => attachment.kind === "video") ||
+    promptMedia.has("video");
+  const hasImage =
+    attachments.some((attachment) => attachment.kind === "image") ||
+    promptMedia.has("image");
+
+  if (hasVideo && !selectedModel?.supportsVideo) {
+    return modelOptions.find((model) => model.supportsVideo) ?? selectedModel;
+  }
+
+  if (hasImage && !selectedModel?.supportsImage) {
+    return modelOptions.find((model) => model.supportsImage) ?? selectedModel;
+  }
+
+  return selectedModel;
+}
+
+function extractMediaKinds(prompt: string) {
+  const kinds = new Set<"image" | "video">();
+  const matches = prompt.match(/https?:\/\/[^\s"'<>]+/gi) ?? [];
+
+  for (const rawUrl of matches) {
+    const url = rawUrl.replace(/[),.]+$/, "");
+
+    if (/\.(png|jpe?g|webp)$/i.test(url)) {
+      kinds.add("image");
+    }
+
+    if (/\.(mp4|webm|mov)$/i.test(url)) {
+      kinds.add("video");
+    }
+  }
+
+  return kinds;
 }
 
 export default function AppShell() {
@@ -182,6 +226,11 @@ export default function AppShell() {
 
     const now = new Date().toISOString();
     const titlePrompt = prompt || attachments[0]?.name || "Media analysis";
+    const requestModel = getSupportedModelForAttachments(
+      settings.model,
+      attachments,
+      prompt,
+    );
     const userMessage: Message = {
       id: createId("msg"),
       role: "user",
@@ -197,7 +246,7 @@ export default function AppShell() {
       content: "",
       createdAt: now,
       provider: "nvidia",
-      model: settings.model,
+      model: requestModel?.id ?? settings.model,
       status: "running",
     };
 
@@ -215,7 +264,7 @@ export default function AppShell() {
       const response = await runAiTask({
         sessionId: activeSession.id,
         prompt,
-        model: settings.model,
+        model: requestModel?.id ?? settings.model,
         instructions,
         attachments,
         history: getRecentHistory(activeSession),
