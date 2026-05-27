@@ -66,11 +66,9 @@ export default function AiPanel({
               <span className="block truncate text-sm">
                 {selectedModel?.label ?? "Select model"}
               </span>
-              <span className="block truncate text-xs text-zinc-600">
-                {selectedModel?.supportsVideo
-                  ? `${selectedModel.vendor} · video`
-                  : selectedModel?.vendor ?? "NVIDIA NIM"}
-              </span>
+                <span className="block truncate text-xs text-zinc-600">
+                  {selectedModel?.vendor ?? "NVIDIA NIM"}
+                </span>
             </span>
             <span className="font-mono text-xs text-zinc-500">v</span>
           </button>
@@ -104,7 +102,7 @@ export default function AiPanel({
                     <span className="min-w-0">
                       <span className="block truncate text-sm">{model.label}</span>
                       <span className="block truncate text-xs text-zinc-600">
-                        {model.supportsVideo ? `${model.vendor} · video` : model.vendor}
+                        {model.vendor}
                       </span>
                     </span>
                   </button>
@@ -127,7 +125,7 @@ export default function AiPanel({
 
 function ModelIcon({ model }: { model: ModelOption }) {
   return (
-    <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded border border-zinc-800 bg-black">
+    <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded bg-black">
       <Image
         alt=""
         className="h-5 w-5 object-contain"

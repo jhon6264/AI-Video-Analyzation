@@ -327,9 +327,9 @@ export default function AppShell() {
   }
 
   return (
-    <div className="h-screen overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
+    <div className="h-screen h-dvh overflow-hidden bg-[var(--background)] text-[var(--foreground)]">
       <div
-        className={`flex h-screen border-zinc-800 bg-black text-zinc-100 lg:grid ${
+        className={`flex h-screen h-dvh border-zinc-800 bg-black text-zinc-100 lg:grid ${
           isSidebarCollapsed
             ? "lg:grid-cols-[48px_1fr]"
             : "lg:grid-cols-[300px_1fr]"
@@ -351,7 +351,7 @@ export default function AppShell() {
             ${isSidebarCollapsed ? "lg:w-[48px]" : "lg:w-[300px]"}
           `}
         >
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800 px-3">
+          <div className="hidden lg:flex h-12 shrink-0 items-center justify-between border-b border-zinc-800 px-3">
             <div className="w-full" />
             <button
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
@@ -387,7 +387,7 @@ export default function AppShell() {
             </>
           ) : null}
         </aside>
-        <main className="flex h-screen min-h-0 flex-col bg-black">
+        <main className="flex h-screen h-dvh min-h-0 flex-col bg-black">
           <header className="flex h-12 shrink-0 items-center justify-between px-[clamp(1rem,3vw,1.5rem)]">
             <div className="flex items-center gap-3">
               <button 
@@ -398,7 +398,7 @@ export default function AppShell() {
                 {isMobileMenuOpen ? "<" : ">"}
               </button>
               <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
-                Alaws lang.
+                Alaws lage.
               </h1>
             </div>
             <Image 

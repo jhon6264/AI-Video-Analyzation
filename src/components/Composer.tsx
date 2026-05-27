@@ -1,6 +1,7 @@
 "use client";
 
 import { ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
+import { animate } from "animejs";
 import { uploadMedia } from "@/lib/api";
 import { createId } from "@/lib/format";
 import type { ChatAttachment } from "@/types/chat";
@@ -21,6 +22,7 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
   const [prompt, setPrompt] = useState("");
   const [attachments, setAttachments] = useState<LocalAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const attachmentListRef = useRef<HTMLDivElement>(null);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const attachmentsRef = useRef<LocalAttachment[]>([]);
   const hasUploadingAttachment = attachments.some(
@@ -48,6 +50,28 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
     },
     [],
   );
+
+  useEffect(() => {
+    if (!attachmentListRef.current || !attachments.length) {
+      return;
+    }
+
+    const previews = attachmentListRef.current.querySelectorAll(
+      "[data-attachment-preview]",
+    );
+    const animation = animate(previews, {
+      opacity: [0, 1],
+      translateY: [8, 0],
+      scale: [0.96, 1],
+      delay: (_target: unknown, index: number) => index * 35,
+      duration: 220,
+      ease: "outCubic",
+    });
+
+    return () => {
+      animation.revert();
+    };
+  }, [attachments.length]);
 
   function submit(event?: FormEvent) {
     event?.preventDefault();
@@ -159,7 +183,7 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
 
   return (
     <form
-      className="shrink-0 border-t border-zinc-800 bg-black px-[clamp(1rem,3vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)]"
+      className="shrink-0 border-t border-zinc-800 bg-black px-[clamp(1rem,3vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)] pb-[calc(clamp(1rem,2vh,1.5rem)+env(safe-area-inset-bottom))]"
       onSubmit={submit}
     >
       <div className="mx-auto max-w-4xl flex items-center gap-3">
@@ -183,10 +207,14 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
         </button>
         <div className="flex-1 rounded-md border border-zinc-800 bg-zinc-950 p-[clamp(0.5rem,1vw,0.75rem)] focus-within:border-zinc-600">
           {attachments.length ? (
-            <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
+            <div
+              className="mb-2 flex gap-2 overflow-x-auto pb-1"
+              ref={attachmentListRef}
+            >
               {attachments.map((attachment) => (
                 <div
                   className="relative h-24 w-32 shrink-0 overflow-hidden rounded-md border border-zinc-800 bg-black"
+                  data-attachment-preview
                   key={attachment.id}
                 >
                   {attachment.kind === "image" && attachment.previewUrl ? (

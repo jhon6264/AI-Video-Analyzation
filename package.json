@@ -13,8 +13,7 @@
     "worker:secret:nvidia": "npx wrangler@latest secret put NVIDIA_API_KEY --cwd workers/alaws-api"
   },
   "dependencies": {
-    "anime": "^0.1.2",
-    "js": "^0.1.0",
+    "animejs": "^4.4.1",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",

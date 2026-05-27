@@ -8,7 +8,7 @@ type AssistantTerminalOutputProps = {
   message: Message;
 };
 
-const thinkingPhrases = ["Thinking", "Tanginamo", "Yanyan Toyab"];
+const thinkingPhrases = ["Thinking", "Papibords", "Eian Bading", "Hulat gamay", "Hapit na", "Almost done", "Here it comes", "Hakdog", "Ara na", "wait po", "kadali lang" ];
 
 export default function AssistantTerminalOutput({
   message,

@@ -1,5 +1,7 @@
 "use client";
 
+import { animate } from "animejs";
+import { useEffect, useRef } from "react";
 import { formatTime } from "@/lib/format";
 import type { Message } from "@/types/chat";
 
@@ -8,20 +10,41 @@ type UserCommandCardProps = {
 };
 
 export default function UserCommandCard({ message }: UserCommandCardProps) {
+  const bubbleRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!bubbleRef.current) {
+      return;
+    }
+
+    if (Date.now() - new Date(message.createdAt).getTime() > 1500) {
+      return;
+    }
+
+    const animation = animate(bubbleRef.current, {
+      opacity: [0, 1],
+      translateX: [24, 0],
+      scale: [0.98, 1],
+      duration: 260,
+      ease: "outCubic",
+    });
+
+    return () => {
+      animation.revert();
+    };
+  }, [message.createdAt, message.id]);
+
   return (
-    <div className="flex flex-col items-end">
-      <article className="ml-auto w-fit max-w-2xl rounded-md border border-zinc-800 bg-zinc-950 p-4">
-        <div className="mb-2 flex items-center gap-3 text-xs text-zinc-600">
-          {/* User label removed for cleaner UI */}
-        </div>
-        <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-zinc-200">
+    <div className="flex flex-col items-end" ref={bubbleRef}>
+      <article className="relative ml-auto w-fit max-w-2xl rounded-[22px] rounded-br-md bg-zinc-900 px-4 py-3 text-zinc-100 shadow-[0_8px_24px_rgba(0,0,0,0.2)] after:absolute after:bottom-0 after:-right-1.5 after:h-4 after:w-4 after:rounded-bl-[16px] after:bg-zinc-900 after:content-['']">
+        <p className="relative z-10 whitespace-pre-wrap break-words text-sm leading-6">
           {message.content || "Analyze the attached media."}
-        </pre>
+        </p>
         {message.attachments?.length ? (
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+          <div className="relative z-10 mt-3 flex gap-2 overflow-x-auto pb-1">
             {message.attachments.map((attachment) => (
               <a
-                className="group relative h-28 w-36 shrink-0 overflow-hidden rounded-md border border-zinc-800 bg-black"
+                className="group relative h-28 w-36 shrink-0 overflow-hidden rounded-[16px] border border-zinc-800 bg-black"
                 href={attachment.url}
                 key={attachment.id}
                 rel="noreferrer"

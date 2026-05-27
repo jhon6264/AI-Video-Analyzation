@@ -87,7 +87,7 @@ const markdownComponents: Components = {
 
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
   return (
-    <div className="markdown-message max-w-none space-y-4 break-words font-mono text-sm leading-7 text-zinc-200">
+    <div className="markdown-message max-w-none space-y-4 break-words text-sm leading-7 text-zinc-200">
       <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>
