@@ -12,7 +12,7 @@ export default function UserCommandCard({ message }: UserCommandCardProps) {
     <div className="flex flex-col items-end">
       <article className="ml-auto w-fit max-w-2xl rounded-md border border-zinc-800 bg-zinc-950 p-4">
         <div className="mb-2 flex items-center gap-3 text-xs text-zinc-600">
-          <span className="font-mono">[user]</span>
+          {/* User label removed for cleaner UI */}
         </div>
         <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-zinc-200">
           {message.content || "Analyze the attached media."}

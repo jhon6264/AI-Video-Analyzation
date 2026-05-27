@@ -159,10 +159,10 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
 
   return (
     <form
-      className="shrink-0 border-t border-zinc-800 bg-black px-4 py-4 sm:px-6"
+      className="shrink-0 border-t border-zinc-800 bg-black px-[clamp(1rem,3vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)]"
       onSubmit={submit}
     >
-      <div className="mx-auto max-w-4xl rounded-md border border-zinc-800 bg-zinc-950 p-2 focus-within:border-zinc-600">
+      <div className="mx-auto max-w-4xl rounded-md border border-zinc-800 bg-zinc-950 p-[clamp(0.5rem,1vw,0.75rem)] focus-within:border-zinc-600">
         {attachments.length ? (
           <div className="mb-2 flex gap-2 overflow-x-auto pb-1">
             {attachments.map((attachment) => (
@@ -236,10 +236,10 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
           >
             +
           </button>
-          <textarea
-            aria-label="Message Alaws"
-            className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 font-mono text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
-            disabled={isSending}
+           <textarea
+             aria-label="Message Alaws"
+             className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 font-mono text-[clamp(0.8rem,1.2vw,0.875rem)] leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
+             disabled={isSending}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {

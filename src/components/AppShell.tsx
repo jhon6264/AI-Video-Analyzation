@@ -101,6 +101,7 @@ export default function AppShell() {
   const [isInstructionsOpen, setIsInstructionsOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -332,9 +333,28 @@ export default function AppShell() {
             : "grid-cols-1 lg:grid-cols-[300px_1fr]"
         }`}
       >
-        <aside className="flex min-h-0 flex-col border-b border-zinc-800 bg-zinc-950 lg:h-screen lg:border-b-0 lg:border-r">
+        {/* Mobile Overlay */}
+        {isMobileMenuOpen && (
+          <div 
+            className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm lg:hidden" 
+            onClick={() => setIsMobileMenuOpen(false)}
+          />
+        )}
+
+        <aside 
+          className={`
+            flex min-h-0 flex-col border-zinc-800 bg-zinc-950 transition-transform duration-300 ease-in-out
+            fixed inset-y-0 left-0 z-50 w-72 border-r lg:relative lg:translate-x-0 lg:h-screen lg:border-b lg:border-r
+            ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
+            ${isSidebarCollapsed ? "lg:w-[48px]" : "lg:w-[300px]"}
+          `}
+        >
           <div className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-800 px-3">
-            {!isSidebarCollapsed ? (
+            {!isSidebarCollapsed && !isMobileMenuOpen ? (
+              <span className="font-mono text-xs font-semibold text-zinc-400">
+                Alaws lang.
+              </span>
+            ) : !isSidebarCollapsed ? (
               <span className="font-mono text-xs font-semibold text-zinc-400">
                 Alaws lang.
               </span>
@@ -342,7 +362,10 @@ export default function AppShell() {
             <button
               aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               className="grid h-8 w-8 place-items-center rounded-md border border-zinc-800 text-zinc-400 transition hover:border-zinc-600 hover:text-white"
-              onClick={() => setIsSidebarCollapsed((current) => !current)}
+              onClick={() => {
+                setIsSidebarCollapsed((current) => !current);
+                if (window.innerWidth < 1024) setIsMobileMenuOpen(false);
+              }}
               type="button"
             >
               {isSidebarCollapsed ? ">" : "<"}
@@ -356,7 +379,10 @@ export default function AppShell() {
                 onDeleteSession={deleteSession}
                 onNewChat={handleNewChat}
                 onRenameSession={renameSession}
-                onSelectSession={setActiveSessionId}
+                onSelectSession={(id) => {
+                  setActiveSessionId(id);
+                  setIsMobileMenuOpen(false);
+                }}
               />
               <AiPanel
                 models={modelOptions}
@@ -368,14 +394,23 @@ export default function AppShell() {
           ) : null}
         </aside>
         <main className="flex h-screen min-h-0 flex-col bg-black">
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-4 sm:px-6">
-            <div>
-              <h1 className="font-mono text-sm font-semibold tracking-normal text-zinc-100">
-                Alaws lang.
-              </h1>
-              <p className="mt-0.5 text-xs text-zinc-500">
-                Terminal AI chat for text, image, and video tasks
-              </p>
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-[clamp(1rem,3vw,1.5rem)]">
+            <div className="flex items-center gap-3">
+              <button 
+                className="grid h-8 w-8 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
+                onClick={() => setIsMobileMenuOpen(true)}
+                type="button"
+              >
+                ☰
+              </button>
+              <div>
+                <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
+                  Alaws lang.
+                </h1>
+                <p className="mt-0.5 text-[clamp(0.7rem,1.2vw,0.75rem)] text-zinc-500">
+                  Terminal AI chat for text, image, and video tasks
+                </p>
+              </div>
             </div>
             <button
               className="rounded-md border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-600 hover:text-white"
