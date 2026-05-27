@@ -60,7 +60,7 @@ export async function runAiTask({
       );
     }
 
-    const content = await readTextStream(response, onToken);
+    const content = await readTextStream(response, onToken, signal);
 
     return {
       ok: true,
@@ -121,6 +121,7 @@ export async function uploadMedia(file: File): Promise<AiAttachment> {
 async function readTextStream(
   response: Response,
   onToken?: (token: string) => void,
+  signal?: AbortSignal,
 ) {
   if (!response.body) {
     return "";
@@ -139,17 +140,51 @@ async function readTextStream(
 
     const token = decoder.decode(value, { stream: true });
     content += token;
-    onToken?.(token);
+    await emitTypewriterToken(token, onToken, signal);
   }
 
   const trailing = decoder.decode();
 
   if (trailing) {
     content += trailing;
-    onToken?.(trailing);
+    await emitTypewriterToken(trailing, onToken, signal);
   }
 
   return content;
+}
+
+async function emitTypewriterToken(
+  token: string,
+  onToken?: (token: string) => void,
+  signal?: AbortSignal,
+) {
+  if (!onToken || !token) {
+    return;
+  }
+
+  const chunks = chunkText(token, 4);
+
+  for (const chunk of chunks) {
+    if (signal?.aborted) {
+      throw new DOMException("Request aborted", "AbortError");
+    }
+
+    onToken(chunk);
+
+    if (chunks.length > 1) {
+      await wait(8, signal);
+    }
+  }
+}
+
+function chunkText(text: string, size: number) {
+  const chunks: string[] = [];
+
+  for (let index = 0; index < text.length; index += size) {
+    chunks.push(text.slice(index, index + size));
+  }
+
+  return chunks.length ? chunks : [text];
 }
 
 function wait(ms: number, signal?: AbortSignal) {

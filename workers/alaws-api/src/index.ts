@@ -20,6 +20,12 @@ type AiAttachment = {
   url: string;
 };
 
+type TranscriptResult = {
+  status: "disabled" | "failed" | "success";
+  transcript: string;
+  error?: string;
+};
+
 type Env = {
   NVIDIA_API_KEY: string;
   ALLOWED_ORIGIN?: string;
@@ -215,7 +221,9 @@ async function streamNvidia(
   }
 
   const hasVideo = hasVideoInput(request.prompt, request.attachments);
-  const transcript = hasVideo ? await getAudioTranscript(request, env) : "";
+  const transcript: TranscriptResult = hasVideo
+    ? await getAudioTranscript(request, env)
+    : { status: "disabled", transcript: "" };
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
     () => timeoutController.abort(),
@@ -258,7 +266,7 @@ async function streamNvidia(
 function buildNvidiaBody(
   request: AnalyzeRequest,
   hasVideo: boolean,
-  audioTranscript: string,
+  audioTranscript: TranscriptResult,
 ) {
   return {
     model: request.model,
@@ -291,7 +299,10 @@ function buildNvidiaBody(
   };
 }
 
-function buildUserMessage(request: AnalyzeRequest, audioTranscript = "") {
+function buildUserMessage(
+  request: AnalyzeRequest,
+  audioTranscript: TranscriptResult,
+) {
   const media = [...request.attachments, ...extractMediaUrls(request.prompt)].slice(0, 4);
   const text = buildUserText(request.prompt, audioTranscript);
 
@@ -324,17 +335,25 @@ function buildUserMessage(request: AnalyzeRequest, audioTranscript = "") {
   };
 }
 
-function buildUserText(prompt: string, audioTranscript: string) {
+function buildUserText(prompt: string, audioTranscript: TranscriptResult) {
   const basePrompt = prompt || DEFAULT_PROMPT;
 
-  if (!audioTranscript) {
+  if (audioTranscript.status === "disabled") {
     return basePrompt;
+  }
+
+  if (audioTranscript.status === "failed") {
+    return `${basePrompt}
+
+Audio transcription failed: ${audioTranscript.error ?? "unknown error"}
+
+Use the visual video content when answering. If the user asks about speech or exact words, clearly say the audio transcript was unavailable.`;
   }
 
   return `${basePrompt}
 
 Audio transcript from the video:
-${audioTranscript}
+${audioTranscript.transcript}
 
 Use both the visual video content and the audio transcript when answering.`;
 }
@@ -378,13 +397,20 @@ function hasVideoInput(prompt: string, attachments: AiAttachment[]) {
   );
 }
 
-async function getAudioTranscript(request: AnalyzeRequest, env: Env) {
+async function getAudioTranscript(
+  request: AnalyzeRequest,
+  env: Env,
+): Promise<TranscriptResult> {
   const video = [...request.attachments, ...extractMediaUrls(request.prompt)].find(
     (attachment) => attachment.kind === "video",
   );
 
   if (!video || !env.TRANSCRIBE_SERVICE_URL) {
-    return "";
+    return {
+      status: "failed",
+      transcript: "",
+      error: "transcriber service URL is not configured",
+    };
   }
 
   const serviceUrl = env.TRANSCRIBE_SERVICE_URL.replace(/\/$/, "");
@@ -407,14 +433,39 @@ async function getAudioTranscript(request: AnalyzeRequest, env: Env) {
       signal: AbortSignal.timeout(75_000),
     });
 
+    const data = (await response.json().catch(() => null)) as
+      | { transcript?: string; detail?: string; error?: string }
+      | null;
+
     if (!response.ok) {
-      return "";
+      return {
+        status: "failed",
+        transcript: "",
+        error:
+          data?.detail ??
+          data?.error ??
+          `transcriber returned HTTP ${response.status}`,
+      };
     }
 
-    const data = (await response.json()) as { transcript?: string };
-    return typeof data.transcript === "string" ? data.transcript.trim() : "";
+    const transcript =
+      typeof data?.transcript === "string" ? data.transcript.trim() : "";
+
+    if (!transcript) {
+      return {
+        status: "failed",
+        transcript: "",
+        error: "transcriber returned no transcript",
+      };
+    }
+
+    return { status: "success", transcript };
   } catch {
-    return "";
+    return {
+      status: "failed",
+      transcript: "",
+      error: "transcriber request failed or timed out",
+    };
   }
 }
 
