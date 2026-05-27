@@ -362,7 +362,7 @@ export default function AppShell() {
               }}
               type="button"
             >
-              {isSidebarCollapsed ? ">" : "<"}
+              <SidebarToggleIcon isExpanded={!isSidebarCollapsed} />
             </button>
           </div>
           {!isSidebarCollapsed ? (

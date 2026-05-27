@@ -37,7 +37,7 @@ const markdownComponents: Components = {
     }
 
     return (
-      <code className="rounded border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 font-mono text-[0.9em] text-zinc-100">
+      <code className="rounded bg-zinc-950 px-1.5 py-0.5 font-mono text-[0.9em] text-zinc-100">
         {children}
       </code>
     );
@@ -87,7 +87,7 @@ const markdownComponents: Components = {
 
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
   return (
-    <div className="markdown-message max-w-none space-y-4 break-words text-sm leading-7 text-zinc-200">
+    <div className="markdown-message max-w-none space-y-4 break-words font-mono text-sm leading-7 text-zinc-200">
       <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>

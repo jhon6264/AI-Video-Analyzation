@@ -69,8 +69,7 @@ export default function AssistantTerminalOutput({
     return (
       <article className="max-w-4xl">
         <div className="mb-3 font-mono text-sm leading-6 text-zinc-400">
-          &gt; Answered {formatElapsed(elapsedMs)} by{" "}
-          <span className="text-red-400">{message.model ?? "AI model"}</span>
+          &gt; Answered {formatElapsed(elapsedMs)}
         </div>
         <MarkdownMessage content={message.content} />
       </article>
@@ -99,5 +98,5 @@ function getElapsedMs(startedAt: string, completedAt?: string) {
 }
 
 function formatElapsed(ms: number) {
-  return `${(ms / 1000).toFixed(2)}s`;
+  return `${Math.floor(ms / 1000)}s`;
 }
