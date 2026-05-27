@@ -4,8 +4,7 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-05-27",
 	"vars": {
-		"ALLOWED_ORIGIN": "https://alawslang.vercel.app",
-		"TRANSCRIBE_SERVICE_URL": "https://ai-video-analyzation-production.up.railway.app"
+		"ALLOWED_ORIGIN": "https://alawslang.vercel.app"
 	},
 	"r2_buckets": [
 		{

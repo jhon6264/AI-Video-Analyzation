@@ -20,17 +20,9 @@ type AiAttachment = {
   url: string;
 };
 
-type TranscriptResult = {
-  status: "disabled" | "failed" | "success";
-  transcript: string;
-  error?: string;
-};
-
 type Env = {
   NVIDIA_API_KEY: string;
   ALLOWED_ORIGIN?: string;
-  TRANSCRIBE_SERVICE_TOKEN?: string;
-  TRANSCRIBE_SERVICE_URL?: string;
   UPLOADS?: R2Bucket;
 };
 
@@ -64,6 +56,20 @@ const VIDEO_MODEL_IDS = new Set([
   "google/gemma-4-31b-it",
   "google/gemma-3n-e4b-it",
 ]);
+const MODEL_PROFILES: Record<
+  string,
+  { maxTokens?: number; timeoutMs?: number; videoFps?: number }
+> = {
+  "deepseek-ai/deepseek-v4-pro": {
+    maxTokens: 700,
+    timeoutMs: 60_000,
+  },
+  "google/gemma-4-31b-it": {
+    maxTokens: 800,
+    timeoutMs: 75_000,
+    videoFps: 0.5,
+  },
+};
 
 const cleanErrors = {
   invalid: "Send a prompt or attach media before running the model.",
@@ -221,16 +227,14 @@ async function streamNvidia(
   }
 
   const hasVideo = hasVideoInput(request.prompt, request.attachments);
-  const transcript: TranscriptResult = hasVideo
-    ? await getAudioTranscript(request, env)
-    : { status: "disabled", transcript: "" };
+  const profile = getModelProfile(request.model);
   const timeoutController = new AbortController();
   const timeoutId = setTimeout(
     () => timeoutController.abort(),
-    hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS,
+    profile.timeoutMs ?? (hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS),
   );
   const signal = combineAbortSignals(requestSignal, timeoutController.signal);
-  const body = buildNvidiaBody(request, hasVideo, transcript);
+  const body = buildNvidiaBody(request, hasVideo, profile);
   const response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
@@ -266,7 +270,7 @@ async function streamNvidia(
 function buildNvidiaBody(
   request: AnalyzeRequest,
   hasVideo: boolean,
-  audioTranscript: TranscriptResult,
+  profile: ReturnType<typeof getModelProfile>,
 ) {
   return {
     model: request.model,
@@ -276,16 +280,16 @@ function buildNvidiaBody(
         content: request.instructions,
       },
       ...request.history,
-      buildUserMessage(request, audioTranscript),
+      buildUserMessage(request),
     ],
     temperature: 0.2,
-    max_tokens: hasVideo ? 1600 : 1200,
+    max_tokens: profile.maxTokens ?? (hasVideo ? 1200 : 1000),
     stream: true,
     ...(hasVideo
       ? {
           media_io_kwargs: {
             video: {
-              fps: 1.0,
+              fps: profile.videoFps ?? 0.75,
             },
           },
           mm_processor_kwargs: {
@@ -299,12 +303,9 @@ function buildNvidiaBody(
   };
 }
 
-function buildUserMessage(
-  request: AnalyzeRequest,
-  audioTranscript: TranscriptResult,
-) {
+function buildUserMessage(request: AnalyzeRequest) {
   const media = [...request.attachments, ...extractMediaUrls(request.prompt)].slice(0, 4);
-  const text = buildUserText(request.prompt, audioTranscript);
+  const text = request.prompt || DEFAULT_PROMPT;
 
   if (!media.length) {
     return {
@@ -333,29 +334,6 @@ function buildUserMessage(
       ),
     ],
   };
-}
-
-function buildUserText(prompt: string, audioTranscript: TranscriptResult) {
-  const basePrompt = prompt || DEFAULT_PROMPT;
-
-  if (audioTranscript.status === "disabled") {
-    return basePrompt;
-  }
-
-  if (audioTranscript.status === "failed") {
-    return `${basePrompt}
-
-Audio transcription failed: ${audioTranscript.error ?? "unknown error"}
-
-Use the visual video content when answering. If the user asks about speech or exact words, clearly say the audio transcript was unavailable.`;
-  }
-
-  return `${basePrompt}
-
-Audio transcript from the video:
-${audioTranscript.transcript}
-
-Use both the visual video content and the audio transcript when answering.`;
 }
 
 function extractMediaUrls(prompt: string): AiAttachment[] {
@@ -397,76 +375,8 @@ function hasVideoInput(prompt: string, attachments: AiAttachment[]) {
   );
 }
 
-async function getAudioTranscript(
-  request: AnalyzeRequest,
-  env: Env,
-): Promise<TranscriptResult> {
-  const video = [...request.attachments, ...extractMediaUrls(request.prompt)].find(
-    (attachment) => attachment.kind === "video",
-  );
-
-  if (!video || !env.TRANSCRIBE_SERVICE_URL) {
-    return {
-      status: "failed",
-      transcript: "",
-      error: "transcriber service URL is not configured",
-    };
-  }
-
-  const serviceUrl = env.TRANSCRIBE_SERVICE_URL.replace(/\/$/, "");
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
-
-  if (env.TRANSCRIBE_SERVICE_TOKEN) {
-    headers.Authorization = `Bearer ${env.TRANSCRIBE_SERVICE_TOKEN}`;
-  }
-
-  try {
-    const response = await fetch(`${serviceUrl}/transcribe`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        mediaUrl: video.url,
-        languageCode: "en-US",
-      }),
-      signal: AbortSignal.timeout(75_000),
-    });
-
-    const data = (await response.json().catch(() => null)) as
-      | { transcript?: string; detail?: string; error?: string }
-      | null;
-
-    if (!response.ok) {
-      return {
-        status: "failed",
-        transcript: "",
-        error:
-          data?.detail ??
-          data?.error ??
-          `transcriber returned HTTP ${response.status}`,
-      };
-    }
-
-    const transcript =
-      typeof data?.transcript === "string" ? data.transcript.trim() : "";
-
-    if (!transcript) {
-      return {
-        status: "failed",
-        transcript: "",
-        error: "transcriber returned no transcript",
-      };
-    }
-
-    return { status: "success", transcript };
-  } catch {
-    return {
-      status: "failed",
-      transcript: "",
-      error: "transcriber request failed or timed out",
-    };
-  }
+function getModelProfile(model: string) {
+  return MODEL_PROFILES[model] ?? {};
 }
 
 async function handleUpload(
