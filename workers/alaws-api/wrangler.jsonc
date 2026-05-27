@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-05-27",
   "vars": {
-    "ALLOWED_ORIGIN": "http://localhost:3000"
+    "ALLOWED_ORIGIN": "https://alawslang.vercel.app"
   },
   "secrets": {
     "required": ["NVIDIA_API_KEY", "OPENROUTER_API_KEY"]
