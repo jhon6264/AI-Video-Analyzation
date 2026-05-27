@@ -280,11 +280,14 @@ export default function AppShell() {
 
       updateAssistantMessage(assistantId, (message) => ({
         ...message,
-        content: message.content || response.content,
+        content:
+          message.content ||
+          response.content ||
+          "The model finished without returning text. Try a shorter video or another video-capable model.",
         completedAt,
         provider: "nvidia",
         model: response.model,
-        status: "done",
+        status: message.content || response.content ? "done" : "error",
       }));
       updateActiveSession((session) => ({ ...session, updatedAt: completedAt }));
     } catch (error) {

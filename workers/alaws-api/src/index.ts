@@ -534,13 +534,16 @@ function parseSseText(chunk: string) {
       try {
         const parsed = JSON.parse(data) as {
           choices?: Array<{
-            delta?: { content?: string };
-            message?: { content?: string };
+            delta?: { content?: unknown; reasoning_content?: unknown };
+            message?: { content?: unknown; reasoning_content?: unknown };
+            text?: unknown;
           }>;
         };
+        const choice = parsed.choices?.[0];
         text +=
-          parsed.choices?.[0]?.delta?.content ??
-          parsed.choices?.[0]?.message?.content ??
+          extractText(choice?.delta?.content) ||
+          extractText(choice?.message?.content) ||
+          extractText(choice?.text) ||
           "";
       } catch {
         // Ignore malformed provider chunks and continue streaming valid chunks.
@@ -549,6 +552,35 @@ function parseSseText(chunk: string) {
   }
 
   return text;
+}
+
+function extractText(content: unknown): string {
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((part) => {
+      if (typeof part === "string") {
+        return part;
+      }
+
+      if (
+        typeof part === "object" &&
+        part !== null &&
+        "text" in part &&
+        typeof part.text === "string"
+      ) {
+        return part.text;
+      }
+
+      return "";
+    })
+    .join("");
 }
 
 function normalizeError(error: unknown) {
