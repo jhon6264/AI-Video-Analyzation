@@ -394,31 +394,17 @@ export default function AppShell() {
           ) : null}
         </aside>
         <main className="flex h-screen min-h-0 flex-col bg-black">
-          <header className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-800 px-[clamp(1rem,3vw,1.5rem)]">
-            <div className="flex items-center gap-3">
-              <button 
-                className="grid h-8 w-8 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
-                onClick={() => setIsMobileMenuOpen(true)}
-                type="button"
-              >
-                ☰
-              </button>
-              <div>
-                <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
-                  Alaws lang.
-                </h1>
-                <p className="mt-0.5 text-[clamp(0.7rem,1.2vw,0.75rem)] text-zinc-500">
-                  Terminal AI chat for text, image, and video tasks
-                </p>
-              </div>
-            </div>
-            <button
-              className="rounded-md border border-zinc-800 px-3 py-1.5 text-xs text-zinc-300 transition hover:border-zinc-600 hover:text-white"
-              onClick={() => setIsInstructionsOpen(true)}
+          <header className="flex h-12 shrink-0 items-center justify-start gap-3 border-b border-zinc-800 px-[clamp(1rem,3vw,1.5rem)]">
+            <button 
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
+              onClick={() => setIsMobileMenuOpen(true)}
               type="button"
             >
-              settings
+              ☰
             </button>
+            <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
+              Alaws lang.
+            </h1>
           </header>
           <Transcript session={activeSession} />
           <Composer isSending={isSending} onStop={handleStop} onSubmit={handleSubmit} />
