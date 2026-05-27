@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { analyzeVideo } from "@/lib/api";
+import { runAiTask } from "@/lib/api";
 import { createId, createSessionTitle } from "@/lib/format";
 import { getModelsForProvider } from "@/lib/models";
 import {
@@ -139,7 +139,7 @@ export default function AppShell() {
     const assistantMessage: Message = {
       id: assistantId,
       role: "assistant",
-      content: "> analyzing video...\n queued",
+      content: `> ${settings.taskMode} task queued`,
       createdAt: now,
       provider: settings.provider,
       model: settings.model,
@@ -156,11 +156,12 @@ export default function AppShell() {
     }));
 
     try {
-      const response = await analyzeVideo({
+      const response = await runAiTask({
         sessionId: activeSession.id,
         prompt,
         provider: settings.provider,
         model: settings.model,
+        taskMode: settings.taskMode,
         instructions,
         fallback: settings.fallback,
       });
@@ -239,7 +240,7 @@ export default function AppShell() {
                 Alaws lang.
               </h1>
               <p className="mt-0.5 text-xs text-zinc-500">
-                Terminal video analysis chat
+                Terminal AI chat for text, image, and video tasks
               </p>
             </div>
             <button

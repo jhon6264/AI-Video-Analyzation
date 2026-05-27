@@ -31,7 +31,7 @@ export default function Composer({ isSending, onSubmit }: ComposerProps) {
     >
       <div className="mx-auto flex max-w-4xl items-end gap-2 rounded-md border border-zinc-800 bg-zinc-950 p-2 focus-within:border-zinc-600">
         <textarea
-          aria-label="Ask about the video"
+          aria-label="Message Alaws"
           className="max-h-40 min-h-12 flex-1 resize-none bg-transparent px-2 py-2 font-mono text-sm leading-6 text-zinc-100 outline-none placeholder:text-zinc-600"
           disabled={isSending}
           onChange={(event) => setPrompt(event.target.value)}
@@ -40,7 +40,7 @@ export default function Composer({ isSending, onSubmit }: ComposerProps) {
               submit();
             }
           }}
-          placeholder="Ask about the video..."
+          placeholder="Message Alaws..."
           ref={textAreaRef}
           rows={2}
           value={prompt}

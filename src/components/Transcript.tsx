@@ -15,8 +15,8 @@ export default function Transcript({ session }: TranscriptProps) {
         {!session?.messages.length ? (
           <div className="rounded-md border border-dashed border-zinc-800 p-5 font-mono text-sm leading-6 text-zinc-500">
             <p>&gt; ready</p>
-            <p>Paste a public or signed video URL directly into the prompt.</p>
-            <p>Ask for summary, key moments, warnings, or action items.</p>
+            <p>Ask anything, write an image prompt, or request a video task.</p>
+            <p>Paste a media URL only when you want analysis of existing media.</p>
           </div>
         ) : null}
         {session?.messages.map((message) =>

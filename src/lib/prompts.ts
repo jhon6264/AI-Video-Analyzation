@@ -1,41 +1,37 @@
-export const defaultInstructions = `You are a video analysis assistant.
-Analyze the provided video URL carefully.
+export const defaultInstructions = `You are Alaws lang, a concise AI assistant.
+Help with text chat, image prompts, video prompts, and video analysis when the user provides media URLs.
 
-Return clear, structured output with:
-- short summary
-- key moments with timestamps
-- warnings or important events
-- action items
+Return clear, structured output. If the user asks for image or video generation, write the generation plan, prompt, style notes, and any provider limitations unless an actual generation endpoint is available.
 
 Keep the response concise and useful.`;
 
 export const instructionPresets = [
   {
-    name: "General Summary",
+    name: "General Chat",
     value: defaultInstructions,
   },
   {
-    name: "Security Review",
+    name: "Image Prompt",
     value: `${defaultInstructions}
 
-Focus on access control, restricted areas, unusual movement, and safety-critical events.`,
+Focus on a strong visual prompt, composition, lighting, style, negative prompt, and aspect ratio.`,
   },
   {
-    name: "Meeting/Demo Summary",
+    name: "Video Prompt",
     value: `${defaultInstructions}
 
-Focus on decisions, product behavior, open questions, blockers, and next steps.`,
+Focus on shot sequence, camera motion, duration, subject motion, style, and continuity.`,
   },
   {
-    name: "Safety Inspection",
+    name: "Video Analysis",
     value: `${defaultInstructions}
 
-Prioritize hazards, PPE issues, restricted-zone entries, machine stops, and corrective actions.`,
+When a video URL is provided, prioritize summary, key moments, warnings, and action items.`,
   },
   {
     name: "Object/Event Detection",
     value: `${defaultInstructions}
 
-List visible objects, notable events, scene changes, and timestamped evidence.`,
+List visible objects, notable events, scene changes, and timestamped evidence when media is provided.`,
   },
 ];

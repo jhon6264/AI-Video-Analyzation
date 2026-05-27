@@ -1,10 +1,12 @@
 type Provider = "nvidia" | "openrouter";
+type TaskMode = "text" | "image" | "video";
 
 type AnalyzeRequest = {
   sessionId: string;
   prompt: string;
   provider: Provider;
   model: string;
+  taskMode: TaskMode;
   instructions: string;
   fallback: boolean;
 };
@@ -38,9 +40,8 @@ const fallbackOrder: Array<{ provider: Provider; model: string }> = [
 
 const cleanErrors = {
   busy: "All providers are currently busy. Try again in a few minutes.",
-  unsupported: "This model does not support this video input. Try another model.",
-  inaccessible: "The video URL could not be accessed. Make sure it is public or signed.",
-  invalid: "Send a prompt with a video URL and analysis request.",
+  unsupported: "This model does not support the requested task. Try another model.",
+  invalid: "Send a prompt before running the model.",
 };
 
 const worker = {
@@ -103,7 +104,7 @@ const worker = {
 export default worker;
 
 function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
-  if (!body.prompt?.trim() || !body.prompt.match(/https?:\/\/\S+/)) {
+  if (!body.prompt?.trim()) {
     throw new Error(cleanErrors.invalid);
   }
 
@@ -112,9 +113,14 @@ function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
     prompt: body.prompt.trim(),
     provider: body.provider === "openrouter" ? "openrouter" : "nvidia",
     model: body.model?.trim() || "cosmos-reason2-8b",
-    instructions: body.instructions?.trim() || "You are a video analysis assistant.",
+    taskMode: normalizeTaskMode(body.taskMode),
+    instructions: body.instructions?.trim() || "You are Alaws lang, a concise AI assistant.",
     fallback: body.fallback !== false,
   };
+}
+
+function normalizeTaskMode(taskMode: unknown): TaskMode {
+  return taskMode === "image" || taskMode === "video" ? taskMode : "text";
 }
 
 function buildCandidates(request: AnalyzeRequest) {
@@ -166,7 +172,7 @@ async function callProvider(
       messages: [
         {
           role: "system",
-          content: request.instructions,
+          content: buildSystemPrompt(request),
         },
         {
           role: "user",
@@ -192,6 +198,21 @@ async function callProvider(
   }
 
   return normalizeTerminalOutput(content);
+}
+
+function buildSystemPrompt(request: AnalyzeRequest) {
+  const taskGuidance = {
+    text: "The user is asking for normal text chat or assistance. Answer directly.",
+    image:
+      "The user is asking for image generation. If this endpoint cannot return image files, provide a polished image prompt, visual specification, and next-step guidance.",
+    video:
+      "The user is asking for video generation or video analysis. If a media URL is present, analyze it. If generation is requested and this endpoint cannot return video files, provide a polished video prompt, shot plan, and next-step guidance.",
+  } satisfies Record<TaskMode, string>;
+
+  return `${request.instructions}
+
+Task mode: ${request.taskMode}
+${taskGuidance[request.taskMode]}`;
 }
 
 function normalizeTerminalOutput(content: string) {

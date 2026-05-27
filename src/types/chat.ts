@@ -4,6 +4,8 @@ export type MessageStatus = "queued" | "running" | "done" | "error";
 
 export type ProviderId = "nvidia" | "openrouter";
 
+export type TaskMode = "text" | "image" | "video";
+
 export type Message = {
   id: string;
   role: MessageRole;
@@ -25,6 +27,7 @@ export type ChatSession = {
 export type Settings = {
   provider: ProviderId;
   model: string;
+  taskMode: TaskMode;
   requestsRemaining: number;
   restoreTime: string;
   status: "active" | "processing" | "limited" | "error";

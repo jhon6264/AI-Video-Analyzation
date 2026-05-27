@@ -1,10 +1,11 @@
-import type { ProviderId } from "@/types/chat";
+import type { ProviderId, TaskMode } from "@/types/chat";
 
-type AnalyzeRequest = {
+type AiTaskRequest = {
   sessionId: string;
   prompt: string;
   provider: ProviderId;
   model: string;
+  taskMode: TaskMode;
   instructions: string;
   fallback: boolean;
 };
@@ -20,7 +21,7 @@ export type AnalyzeResponse = {
   };
 };
 
-export async function analyzeVideo(request: AnalyzeRequest): Promise<AnalyzeResponse> {
+export async function runAiTask(request: AiTaskRequest): Promise<AnalyzeResponse> {
   const workerUrl = process.env.NEXT_PUBLIC_ALAWS_WORKER_URL;
 
   if (workerUrl) {
@@ -33,7 +34,12 @@ export async function analyzeVideo(request: AnalyzeRequest): Promise<AnalyzeResp
     });
 
     if (!response.ok) {
-      throw new Error("All providers are currently busy. Try again in a few minutes.");
+      const data = (await response.json().catch(() => null)) as
+        | { error?: string }
+        | null;
+      throw new Error(
+        data?.error ?? "All providers are currently busy. Try again in a few minutes.",
+      );
     }
 
     return response.json() as Promise<AnalyzeResponse>;
@@ -45,7 +51,7 @@ export async function analyzeVideo(request: AnalyzeRequest): Promise<AnalyzeResp
     ok: true,
     provider: request.provider,
     model: request.model,
-    content: buildLocalAnalysis(request.prompt),
+    content: buildLocalResponse(request.prompt, request.taskMode),
     usage: {
       requestsRemaining: 46,
       restoreTime: "in 18m 24s",
@@ -53,34 +59,38 @@ export async function analyzeVideo(request: AnalyzeRequest): Promise<AnalyzeResp
   };
 }
 
-function buildLocalAnalysis(prompt: string) {
-  const url = prompt.match(/https?:\/\/\S+/)?.[0] ?? "provided video URL";
+function buildLocalResponse(prompt: string, taskMode: TaskMode) {
+  if (taskMode === "image") {
+    return `> image task queued
+ prompt parsed
+ provider bridge ready
 
-  return `> analyzing video...
- audio transcription ✓
- scene detection ✓
- key moment extraction ✓
- summarization complete ✓
+PROMPT
+${prompt}
 
-SOURCE
-${url}
+STATUS
+The UI can route image intent now. Add a provider-specific image generation endpoint to return actual image assets.`;
+  }
 
-SUMMARY
-The video appears ready for structured review. Connect the Cloudflare Worker to replace this local preview with provider output.
+  if (taskMode === "video") {
+    return `> video task queued
+ prompt parsed
+ provider bridge ready
 
-KEY MOMENTS
-[00:00] Video begins
-[01:20] Primary activity enters frame
-[03:12] Warning candidate: restricted or notable event
-[06:40] Important change in scene state
-[08:02] Activity returns to normal
+PROMPT
+${prompt}
 
-WARNINGS
-orange: verify public access to the video URL
-red: provider keys must stay inside Cloudflare Worker environment variables
+STATUS
+The UI can route video intent now. Add a provider-specific video generation endpoint to return actual video assets.`;
+  }
 
-ACTION ITEMS
-- Connect POST /api/analyze in the Cloudflare Worker
-- Test with a public or signed video URL
-- Review timestamps against the provider response`;
+  return `> response ready
+ context parsed
+ answer generated
+
+PROMPT
+${prompt}
+
+NOTE
+Connect the Cloudflare Worker and provider keys to replace this local preview with model output.`;
 }
