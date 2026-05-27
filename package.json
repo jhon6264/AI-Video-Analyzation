@@ -9,8 +9,7 @@
     "lint": "eslint",
     "worker:dev": "npx wrangler@latest dev --cwd workers/alaws-api",
     "worker:deploy": "npx wrangler@latest deploy --cwd workers/alaws-api",
-    "worker:secret:nvidia": "npx wrangler@latest secret put NVIDIA_API_KEY --cwd workers/alaws-api",
-    "worker:secret:openrouter": "npx wrangler@latest secret put OPENROUTER_API_KEY --cwd workers/alaws-api"
+    "worker:secret:nvidia": "npx wrangler@latest secret put NVIDIA_API_KEY --cwd workers/alaws-api"
   },
   "dependencies": {
     "next": "16.2.6",

@@ -1,8 +1,7 @@
-import type { ProviderId } from "./chat";
-
 export type ModelOption = {
   id: string;
   label: string;
-  provider: ProviderId;
+  icon: string;
+  vendor: string;
   role: string;
 };

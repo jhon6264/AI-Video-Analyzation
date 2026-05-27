@@ -1,34 +1,27 @@
-type Provider = "nvidia" | "openrouter";
-
 type AnalyzeRequest = {
   sessionId: string;
   prompt: string;
-  provider: Provider;
   model: string;
   instructions: string;
 };
 
-type AnalyzeResponse = {
-  ok: true;
-  provider: Provider;
-  model: string;
-  content: string;
-  usage: {
-    requestsRemaining: number;
-    restoreTime: string;
-    rateLimitSource: "provider-header" | "estimated" | "unknown";
-  };
-};
-
 type Env = {
   NVIDIA_API_KEY: string;
-  OPENROUTER_API_KEY: string;
   ALLOWED_ORIGIN?: string;
 };
 
+const NVIDIA_CHAT_COMPLETIONS_URL =
+  "https://integrate.api.nvidia.com/v1/chat/completions";
+const PROVIDER_TIMEOUT_MS = 45_000;
+
 const cleanErrors = {
-  busy: "The selected model is unavailable right now. Try again or choose another model.",
   invalid: "Send a prompt before running the model.",
+  missingKey: "NVIDIA API key is not configured.",
+  unauthorized: "NVIDIA rejected the API key or account access.",
+  unavailable: "The selected NVIDIA model is unavailable on this endpoint.",
+  rateLimited: "The selected NVIDIA model is rate limited right now.",
+  timeout: "The selected NVIDIA model took too long. Try a smaller model.",
+  failed: "The selected NVIDIA model failed. Try again or choose another model.",
 };
 
 const worker = {
@@ -52,26 +45,14 @@ const worker = {
     try {
       const body = (await request.json()) as Partial<AnalyzeRequest>;
       const validated = validateAnalyzeRequest(body);
-      const providerResponse = await callProvider(
-        validated.provider,
-        validated.model,
-        validated,
-        env,
-        request.signal,
-      );
-      const response: AnalyzeResponse = {
-        ok: true,
-        provider: validated.provider,
-        model: validated.model,
-        content: providerResponse.content,
-        usage: providerResponse.usage,
-      };
-
-      return json(response, 200, corsHeaders);
+      return await streamNvidia(validated, env, request.signal, corsHeaders);
     } catch (error) {
-      const message = error instanceof Error ? error.message : cleanErrors.busy;
-      const status = message === cleanErrors.invalid ? 400 : 503;
-      return json({ ok: false, error: message }, status, corsHeaders);
+      const normalized = normalizeError(error);
+      return json(
+        { ok: false, error: normalized.message },
+        normalized.status,
+        corsHeaders,
+      );
     }
   },
 };
@@ -86,45 +67,34 @@ function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
   return {
     sessionId: body.sessionId ?? "session_unknown",
     prompt: body.prompt.trim(),
-    provider: body.provider === "openrouter" ? "openrouter" : "nvidia",
-    model: body.model?.trim() || "nvidia/cosmos-reason2-8b",
+    model: body.model?.trim() || "google/gemma-3n-e4b-it",
     instructions:
       body.instructions?.trim() ||
       "You are Alaws lang, a natural AI assistant similar to ChatGPT.",
   };
 }
 
-async function callProvider(
-  provider: Provider,
-  model: string,
+async function streamNvidia(
   request: AnalyzeRequest,
   env: Env,
-  signal: AbortSignal,
+  requestSignal: AbortSignal,
+  corsHeaders: HeadersInit,
 ) {
-  const endpoint =
-    provider === "nvidia"
-      ? "https://integrate.api.nvidia.com/v1/chat/completions"
-      : "https://openrouter.ai/api/v1/chat/completions";
-  const apiKey = provider === "nvidia" ? env.NVIDIA_API_KEY : env.OPENROUTER_API_KEY;
-
-  if (!apiKey) {
-    throw new Error(`${provider} API key is missing`);
+  if (!env.NVIDIA_API_KEY) {
+    throw new Error(cleanErrors.missingKey);
   }
 
-  const response = await fetch(endpoint, {
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), PROVIDER_TIMEOUT_MS);
+  const signal = combineAbortSignals(requestSignal, timeoutController.signal);
+  const response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
       "Content-Type": "application/json",
-      ...(provider === "openrouter"
-        ? {
-            "HTTP-Referer": "https://alaws-lang.local",
-            "X-Title": "Alaws lang.",
-          }
-        : {}),
     },
     body: JSON.stringify({
-      model,
+      model: request.model,
       messages: [
         {
           role: "system",
@@ -137,66 +107,171 @@ async function callProvider(
       ],
       temperature: 0.2,
       max_tokens: 1200,
+      stream: true,
     }),
     signal,
   });
 
   if (!response.ok) {
-    throw new Error(`${provider}:${model}:${response.status}`);
+    clearTimeout(timeoutId);
+    throw new ProviderError(response.status);
   }
 
-  const data = (await response.json()) as {
-    choices?: Array<{ message?: { content?: string } }>;
-  };
-  const content = data.choices?.[0]?.message?.content?.trim();
-
-  if (!content) {
-    throw new Error(`${provider}:${model}:empty response`);
+  if (!response.body) {
+    clearTimeout(timeoutId);
+    throw new Error("NVIDIA stream body missing");
   }
 
-  return {
-    content: normalizeTerminalOutput(content),
-    usage: extractUsage(response),
-  };
+  const stream = createTextStream(response.body, timeoutId);
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      ...corsHeaders,
+      "Content-Type": "text/plain; charset=utf-8",
+      "Cache-Control": "no-cache",
+    },
+  });
 }
 
-function extractUsage(response: Response): AnalyzeResponse["usage"] {
-  const remaining = getNumericHeader(response.headers, [
-    "x-ratelimit-remaining",
-    "x-ratelimit-remaining-requests",
-    "x-ratelimit-requests-remaining",
-  ]);
-  const retryAfter = response.headers.get("retry-after");
-  const reset = response.headers.get("x-ratelimit-reset");
+function createTextStream(
+  providerBody: ReadableStream<Uint8Array>,
+  timeoutId: ReturnType<typeof setTimeout>,
+) {
+  const decoder = new TextDecoder();
+  const encoder = new TextEncoder();
+  const reader = providerBody.getReader();
+  let buffer = "";
 
-  return {
-    requestsRemaining: remaining ?? 47,
-    restoreTime: retryAfter
-      ? `in ${retryAfter}s`
-      : reset
-        ? `at ${reset}`
-        : "provider-managed",
-    rateLimitSource: remaining === undefined && !retryAfter && !reset
-      ? "unknown"
-      : "provider-header",
-  };
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          clearTimeout(timeoutId);
+          const remaining = flushSseBuffer(buffer);
+
+          if (remaining) {
+            controller.enqueue(encoder.encode(remaining));
+          }
+
+          controller.close();
+          return;
+        }
+
+        buffer += decoder.decode(value, { stream: true });
+        const splitIndex = buffer.lastIndexOf("\n\n");
+
+        if (splitIndex === -1) {
+          continue;
+        }
+
+        const chunk = buffer.slice(0, splitIndex);
+        buffer = buffer.slice(splitIndex + 2);
+        const text = parseSseText(chunk);
+
+        if (text) {
+          controller.enqueue(encoder.encode(text));
+          return;
+        }
+      }
+    },
+    cancel() {
+      clearTimeout(timeoutId);
+      reader.cancel();
+    },
+  });
 }
 
-function getNumericHeader(headers: Headers, names: string[]) {
-  for (const name of names) {
-    const value = headers.get(name);
-    const parsed = value ? Number.parseInt(value, 10) : Number.NaN;
+function flushSseBuffer(buffer: string) {
+  return parseSseText(buffer);
+}
 
-    if (Number.isFinite(parsed)) {
-      return parsed;
+function parseSseText(chunk: string) {
+  let text = "";
+
+  for (const event of chunk.split("\n\n")) {
+    for (const line of event.split("\n")) {
+      if (!line.startsWith("data:")) {
+        continue;
+      }
+
+      const data = line.slice(5).trim();
+
+      if (!data || data === "[DONE]") {
+        continue;
+      }
+
+      try {
+        const parsed = JSON.parse(data) as {
+          choices?: Array<{
+            delta?: { content?: string };
+            message?: { content?: string };
+          }>;
+        };
+        text +=
+          parsed.choices?.[0]?.delta?.content ??
+          parsed.choices?.[0]?.message?.content ??
+          "";
+      } catch {
+        // Ignore malformed provider chunks and continue streaming valid chunks.
+      }
     }
   }
 
-  return undefined;
+  return text;
 }
 
-function normalizeTerminalOutput(content: string) {
-  return content.startsWith(">") ? content : `> analysis complete\n\n${content}`;
+function normalizeError(error: unknown) {
+  if (error instanceof Error && error.message === cleanErrors.invalid) {
+    return { status: 400, message: cleanErrors.invalid };
+  }
+
+  if (error instanceof Error && error.message === cleanErrors.missingKey) {
+    return { status: 500, message: cleanErrors.missingKey };
+  }
+
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return { status: 504, message: cleanErrors.timeout };
+  }
+
+  if (error instanceof ProviderError) {
+    if (error.status === 401 || error.status === 403) {
+      return { status: 502, message: cleanErrors.unauthorized };
+    }
+
+    if (error.status === 404) {
+      return { status: 404, message: cleanErrors.unavailable };
+    }
+
+    if (error.status === 429) {
+      return { status: 429, message: cleanErrors.rateLimited };
+    }
+  }
+
+  return { status: 502, message: cleanErrors.failed };
+}
+
+class ProviderError extends Error {
+  constructor(readonly status: number) {
+    super(`NVIDIA provider error ${status}`);
+  }
+}
+
+function combineAbortSignals(...signals: AbortSignal[]) {
+  const controller = new AbortController();
+
+  for (const signal of signals) {
+    if (signal.aborted) {
+      controller.abort();
+      return controller.signal;
+    }
+
+    signal.addEventListener("abort", () => controller.abort(), { once: true });
+  }
+
+  return controller.signal;
 }
 
 function buildCorsHeaders(request: Request, env: Env) {

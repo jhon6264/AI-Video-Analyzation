@@ -10,8 +10,7 @@ export const storageKeys = {
 } as const;
 
 export const defaultSettings: Settings = {
-  provider: "nvidia",
-  model: "nvidia/cosmos-reason2-8b",
+  model: "google/gemma-3n-e4b-it",
 };
 
 function safeParse<T>(value: string | null, fallback: T): T {

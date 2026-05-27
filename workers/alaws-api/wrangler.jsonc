@@ -7,6 +7,6 @@
     "ALLOWED_ORIGIN": "https://alawslang.vercel.app"
   },
   "secrets": {
-    "required": ["NVIDIA_API_KEY", "OPENROUTER_API_KEY"]
+    "required": ["NVIDIA_API_KEY"]
   }
 }

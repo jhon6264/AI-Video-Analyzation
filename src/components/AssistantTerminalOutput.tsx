@@ -41,11 +41,24 @@ export default function AssistantTerminalOutput({
     return () => window.clearInterval(interval);
   }, [message.completedAt, message.createdAt, message.status]);
 
-  if (message.status === "running") {
+  if (message.status === "running" && !message.content) {
     return (
       <article className="max-w-4xl font-mono">
         <pre className="animate-pulse whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">
           {`> ${formatElapsed(runningElapsedMs)}\n> ${thinkingPhrases[phraseIndex]}`}
+        </pre>
+      </article>
+    );
+  }
+
+  if (message.status === "running") {
+    return (
+      <article className="max-w-4xl font-mono">
+        <div className="mb-3 text-sm leading-6 text-zinc-400">
+          &gt; Answering {formatElapsed(runningElapsedMs)}
+        </div>
+        <pre className="whitespace-pre-wrap break-words text-sm leading-6 text-zinc-200">
+          {message.content}
         </pre>
       </article>
     );

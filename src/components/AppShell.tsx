@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { runAiTask } from "@/lib/api";
 import { createId, createSessionTitle } from "@/lib/format";
-import { getModelsForProvider } from "@/lib/models";
+import { modelOptions } from "@/lib/models";
 import {
   defaultSettings,
   loadActiveSessionId,
@@ -94,11 +94,8 @@ export default function AppShell() {
     [activeSessionId, sessions],
   );
 
-  const activeModels = getModelsForProvider(settings.provider);
-
   function updateSetting(nextSettings: Settings) {
-    const providerModels = getModelsForProvider(nextSettings.provider);
-    const modelBelongsToProvider = providerModels.some(
+    const modelBelongsToProvider = modelOptions.some(
       (model) => model.id === nextSettings.model,
     );
 
@@ -106,7 +103,7 @@ export default function AppShell() {
       ...nextSettings,
       model: modelBelongsToProvider
         ? nextSettings.model
-        : providerModels[0]?.id ?? nextSettings.model,
+        : modelOptions[0]?.id ?? nextSettings.model,
     });
   }
 
@@ -116,6 +113,18 @@ export default function AppShell() {
         session.id === activeSessionId ? updater(session) : session,
       ),
     );
+  }
+
+  function updateAssistantMessage(
+    messageId: string,
+    updater: (message: Message) => Message,
+  ) {
+    updateActiveSession((session) => ({
+      ...session,
+      messages: session.messages.map((message) =>
+        message.id === messageId ? updater(message) : message,
+      ),
+    }));
   }
 
   function renameSession(id: string, title: string) {
@@ -170,7 +179,7 @@ export default function AppShell() {
       role: "assistant",
       content: "",
       createdAt: now,
-      provider: settings.provider,
+      provider: "nvidia",
       model: settings.model,
       status: "running",
     };
@@ -189,29 +198,27 @@ export default function AppShell() {
       const response = await runAiTask({
         sessionId: activeSession.id,
         prompt,
-        provider: settings.provider,
         model: settings.model,
         instructions,
         signal: abortController.signal,
+        onToken: (token) => {
+          updateAssistantMessage(assistantId, (message) => ({
+            ...message,
+            content: `${message.content}${token}`,
+          }));
+        },
       });
       const completedAt = new Date().toISOString();
 
-      updateActiveSession((session) => ({
-        ...session,
-        updatedAt: completedAt,
-        messages: session.messages.map((message) =>
-          message.id === assistantId
-            ? {
-                ...message,
-                content: response.content,
-                completedAt,
-                provider: response.provider,
-                model: response.model,
-                status: "done",
-              }
-            : message,
-        ),
+      updateAssistantMessage(assistantId, (message) => ({
+        ...message,
+        content: message.content || response.content,
+        completedAt,
+        provider: "nvidia",
+        model: response.model,
+        status: "done",
       }));
+      updateActiveSession((session) => ({ ...session, updatedAt: completedAt }));
     } catch (error) {
       const failedAt = new Date().toISOString();
       const wasStopped = error instanceof Error && error.name === "AbortError";
@@ -281,7 +288,7 @@ export default function AppShell() {
                 onSelectSession={setActiveSessionId}
               />
               <AiPanel
-                models={activeModels}
+                models={modelOptions}
                 settings={settings}
                 onOpenInstructions={() => setIsInstructionsOpen(true)}
                 onSettingsChange={updateSetting}

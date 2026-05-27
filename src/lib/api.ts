@@ -1,27 +1,21 @@
-import type { ProviderId } from "@/types/chat";
-
 type AiTaskRequest = {
   sessionId: string;
   prompt: string;
-  provider: ProviderId;
   model: string;
   instructions: string;
   signal?: AbortSignal;
+  onToken?: (token: string) => void;
 };
 
 export type AnalyzeResponse = {
   ok: boolean;
-  provider: ProviderId;
+  provider: "nvidia";
   model: string;
   content: string;
-  usage: {
-    requestsRemaining: number;
-    restoreTime: string;
-    rateLimitSource?: "provider-header" | "estimated" | "unknown";
-  };
 };
 
 export async function runAiTask({
+  onToken,
   signal,
   ...request
 }: AiTaskRequest): Promise<AnalyzeResponse> {
@@ -42,20 +36,23 @@ export async function runAiTask({
         | { error?: string }
         | null;
       throw new Error(
-        data?.error ?? "All providers are currently busy. Try again in a few minutes.",
+        data?.error ?? "The selected NVIDIA model failed. Try another model.",
       );
     }
 
-    return response.json() as Promise<AnalyzeResponse>;
+    const content = await readTextStream(response, onToken);
+
+    return {
+      ok: true,
+      provider: "nvidia",
+      model: request.model,
+      content,
+    };
   }
 
   await wait(900, signal);
 
-  return {
-    ok: true,
-    provider: request.provider,
-    model: request.model,
-    content: `> response ready
+  const content = `> response ready
  context parsed
  answer generated
 
@@ -63,13 +60,50 @@ PROMPT
 ${request.prompt}
 
 NOTE
-Connect the Cloudflare Worker and provider keys to replace this local preview with model output.`,
-    usage: {
-      requestsRemaining: 46,
-      restoreTime: "in 18m 24s",
-      rateLimitSource: "estimated",
-    },
+Connect the Cloudflare Worker and provider keys to replace this local preview with model output.`;
+
+  onToken?.(content);
+
+  return {
+    ok: true,
+    provider: "nvidia",
+    model: request.model,
+    content,
   };
+}
+
+async function readTextStream(
+  response: Response,
+  onToken?: (token: string) => void,
+) {
+  if (!response.body) {
+    return "";
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let content = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+
+    if (done) {
+      break;
+    }
+
+    const token = decoder.decode(value, { stream: true });
+    content += token;
+    onToken?.(token);
+  }
+
+  const trailing = decoder.decode();
+
+  if (trailing) {
+    content += trailing;
+    onToken?.(trailing);
+  }
+
+  return content;
 }
 
 function wait(ms: number, signal?: AbortSignal) {

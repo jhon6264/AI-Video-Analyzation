@@ -2,7 +2,7 @@ export type MessageRole = "user" | "assistant" | "system";
 
 export type MessageStatus = "queued" | "running" | "done" | "error" | "stopped";
 
-export type ProviderId = "nvidia" | "openrouter";
+export type ProviderId = "nvidia";
 
 export type Message = {
   id: string;
@@ -24,6 +24,5 @@ export type ChatSession = {
 };
 
 export type Settings = {
-  provider: ProviderId;
   model: string;
 };
