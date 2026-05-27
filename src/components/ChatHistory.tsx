@@ -36,11 +36,12 @@ export default function ChatHistory({
       <div className="mb-3 flex items-center justify-between">
         <p className="text-xs font-medium uppercase text-zinc-500">Chat History</p>
         <button
-          className="rounded-md border border-zinc-800 px-2.5 py-1 text-xs text-zinc-200 transition hover:border-green-500 hover:text-green-300"
+          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-zinc-800 px-2 text-xs text-zinc-200 transition hover:border-green-500 hover:text-green-300"
           onClick={onNewChat}
           type="button"
         >
-          + New Chat
+          <NewChatIcon />
+          <span>New Chat</span>
         </button>
       </div>
       <input
@@ -126,5 +127,25 @@ export default function ChatHistory({
         })}
       </div>
     </section>
+  );
+}
+
+function NewChatIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719" />
+      <path d="M8 12h8" />
+      <path d="M12 8v8" />
+    </svg>
   );
 }

@@ -368,7 +368,7 @@ export default function AppShell() {
               }}
               type="button"
             >
-              {isSidebarCollapsed ? ">" : "<"}
+              <SidebarToggleIcon isExpanded={!isSidebarCollapsed} />
             </button>
           </div>
           {!isSidebarCollapsed ? (
@@ -419,5 +419,24 @@ export default function AppShell() {
         />
       ) : null}
     </div>
+  );
+}
+
+function SidebarToggleIcon({ isExpanded }: { isExpanded: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`h-5 w-5 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect width="18" height="18" x="3" y="3" rx="2" />
+      <path d="m10 8 4 4-4 4" />
+    </svg>
   );
 }
