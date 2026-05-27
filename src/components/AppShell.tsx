@@ -34,6 +34,21 @@ function createEmptySession(): ChatSession {
   };
 }
 
+function getRecentHistory(session: ChatSession) {
+  return session.messages
+    .filter(
+      (message) =>
+        (message.role === "user" || message.role === "assistant") &&
+        message.status === "done" &&
+        message.content.trim(),
+    )
+    .slice(-10)
+    .map((message) => ({
+      role: message.role as "user" | "assistant",
+      content: message.content,
+    }));
+}
+
 export default function AppShell() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState("");
@@ -200,6 +215,7 @@ export default function AppShell() {
         prompt,
         model: settings.model,
         instructions,
+        history: getRecentHistory(activeSession),
         signal: abortController.signal,
         onToken: (token) => {
           updateAssistantMessage(assistantId, (message) => ({

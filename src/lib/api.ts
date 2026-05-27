@@ -3,8 +3,14 @@ type AiTaskRequest = {
   prompt: string;
   model: string;
   instructions: string;
+  history: AiMessage[];
   signal?: AbortSignal;
   onToken?: (token: string) => void;
+};
+
+export type AiMessage = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 export type AnalyzeResponse = {

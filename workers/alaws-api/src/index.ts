@@ -3,6 +3,12 @@ type AnalyzeRequest = {
   prompt: string;
   model: string;
   instructions: string;
+  history: AiMessage[];
+};
+
+type AiMessage = {
+  role: "user" | "assistant";
+  content: string;
 };
 
 type Env = {
@@ -71,7 +77,30 @@ function validateAnalyzeRequest(body: Partial<AnalyzeRequest>): AnalyzeRequest {
     instructions:
       body.instructions?.trim() ||
       "You are Alaws lang, a natural AI assistant similar to ChatGPT.",
+    history: normalizeHistory(body.history),
   };
+}
+
+function normalizeHistory(history: unknown): AiMessage[] {
+  if (!Array.isArray(history)) {
+    return [];
+  }
+
+  return history
+    .filter(
+      (message): message is AiMessage =>
+        typeof message === "object" &&
+        message !== null &&
+        ((message as AiMessage).role === "user" ||
+          (message as AiMessage).role === "assistant") &&
+        typeof (message as AiMessage).content === "string" &&
+        (message as AiMessage).content.trim().length > 0,
+    )
+    .slice(-10)
+    .map((message) => ({
+      role: message.role,
+      content: message.content.trim(),
+    }));
 }
 
 async function streamNvidia(
@@ -100,6 +129,7 @@ async function streamNvidia(
           role: "system",
           content: request.instructions,
         },
+        ...request.history,
         {
           role: "user",
           content: request.prompt,
