@@ -34,12 +34,17 @@ export default function Transcript({ session }: TranscriptProps) {
         {!session?.messages.length ? (
           <div className="grid min-h-[45vh] place-items-center text-center">
             <div className="w-full max-w-full">
-              <pre className="mx-auto max-w-full overflow-hidden whitespace-pre font-mono text-[clamp(0.34rem,1.52vw,1rem)] font-semibold leading-[1.05] tracking-normal text-zinc-100">
-{String.raw`   ___    __                         __
-  / _ |  / / ___ __    __ ___  ___   / / ___ _ ___ _ ___
- / __ | / / / _ \\ \ /\/ // _ \(_-<  / / / _  // _  // -_)
-/_/ |_|/_/  \___/ \_/\_/ \___//___/ /_/  \_,_/ \_, / \__/
-                                               /___/`}
+              <pre className="mx-auto max-w-full overflow-hidden whitespace-pre font-display-mono text-[clamp(0.55rem,2.25vw,1.35rem)] font-semibold leading-[1.02] tracking-normal text-zinc-100">
+{String.raw`   ___    __                        
+  / _ |  / / ___ _ _    __ ___
+ / __ | / / / _  /| |/|/ //(_-<
+/_/ |_|/_/  \_,_/ |__,__//___/
+
+   __                      
+  / /   ___ _ ___ _ ___
+ / /__ / _  // _  // -_)
+/____/ \_,_/ \_, / \__/
+             /___/`}
               </pre>
               <p className="mt-4 text-sm text-zinc-500">Ask anything</p>
             </div>
