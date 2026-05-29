@@ -319,7 +319,7 @@ export default function AppShell() {
         content:
           message.content ||
           response.content ||
-          "The model finished without returning text. Try a shorter video or another video-capable model.",
+          "The selected model returned no final answer. Try a shorter prompt or choose a faster model.",
         completedAt,
         provider: "nvidia",
         model: response.model,

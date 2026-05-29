@@ -58,31 +58,57 @@ const VIDEO_MODEL_IDS = new Set([
   "google/gemma-3n-e4b-it",
 ]);
 type ModelProfile = {
+  extraBody?: Record<string, unknown>;
   maxTokens?: number;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
   startupTimeoutMs?: number;
   streamInactivityTimeoutMs?: number;
   historyLimit?: number;
   mediaHistoryLimit?: number;
+  systemMode?: "system" | "prepend-to-user";
+  stripOutput?: "gemma-channel-tags";
   videoFps?: number;
 };
 
 const MODEL_PROFILES: Record<string, ModelProfile> = {
   "deepseek-ai/deepseek-v4-pro": {
-    maxTokens: 10_000,
+    extraBody: {
+      reasoning_effort: "none",
+    },
+    maxTokens: 4096,
     startupTimeoutMs: 120_000,
     streamInactivityTimeoutMs: 60_000,
     historyLimit: 4,
   },
   "google/gemma-4-31b-it": {
-    maxTokens: 10_000,
+    extraBody: {
+      chat_template_kwargs: {
+        enable_thinking: false,
+      },
+    },
+    maxTokens: 4096,
+    temperature: 1,
+    topP: 0.95,
+    topK: 64,
     startupTimeoutMs: 150_000,
     streamInactivityTimeoutMs: 60_000,
     historyLimit: 4,
     mediaHistoryLimit: 2,
+    systemMode: "prepend-to-user",
+    stripOutput: "gemma-channel-tags",
     videoFps: 0.5,
   },
   "moonshotai/kimi-k2.6": {
-    maxTokens: 10_000,
+    extraBody: {
+      chat_template_kwargs: {
+        thinking: false,
+      },
+    },
+    maxTokens: 4096,
+    startupTimeoutMs: 120_000,
+    streamInactivityTimeoutMs: 60_000,
     historyLimit: 4,
   },
 };
@@ -100,6 +126,8 @@ const cleanErrors = {
   rateLimited: "The selected NVIDIA model is rate limited right now.",
   timeout:
     "The selected large model is still processing or queued. Try a shorter prompt or choose a faster model.",
+  incompatible:
+    "The selected model request is incompatible with NVIDIA's endpoint. Try a shorter prompt or choose a faster model.",
   failed: "The selected NVIDIA model failed. Try again or choose another model.",
 };
 
@@ -270,7 +298,7 @@ async function streamNvidia(
   }
 
   if (!response.ok) {
-    throw new ProviderError(response.status);
+    throw new ProviderError(response.status, await readProviderError(response));
   }
 
   if (!response.body) {
@@ -281,6 +309,7 @@ async function streamNvidia(
     abortController: providerController,
     inactivityTimeoutMs:
       profile.streamInactivityTimeoutMs ?? STREAM_INACTIVITY_TIMEOUT_MS,
+    stripOutput: profile.stripOutput,
   });
 
   return new Response(stream, {
@@ -298,35 +327,62 @@ function buildNvidiaBody(
   hasVideo: boolean,
   profile: ReturnType<typeof getModelProfile>,
 ) {
-  return {
+  const body: Record<string, unknown> = {
     model: request.model,
-    messages: [
-      {
-        role: "system",
-        content: request.instructions,
-      },
-      ...getProfiledHistory(request.history, profile, hasMediaInput(request)),
-      buildUserMessage(request),
-    ],
-    temperature: 0.2,
+    messages: buildNvidiaMessages(request, profile),
+    temperature: profile.temperature ?? 0.2,
     max_tokens: profile.maxTokens ?? (hasVideo ? 1200 : 1000),
     stream: true,
-    ...(hasVideo
-      ? {
-          media_io_kwargs: {
-            video: {
-              fps: profile.videoFps ?? 0.75,
-            },
-          },
-          mm_processor_kwargs: {
-            size: {
-              shortest_edge: 1568,
-              longest_edge: 262144,
-            },
-          },
-        }
-      : {}),
   };
+
+  if (typeof profile.topP === "number") {
+    body.top_p = profile.topP;
+  }
+
+  if (typeof profile.topK === "number") {
+    body.top_k = profile.topK;
+  }
+
+  if (profile.extraBody) {
+    Object.assign(body, profile.extraBody);
+  }
+
+  if (hasVideo) {
+    body.media_io_kwargs = {
+      video: {
+        fps: profile.videoFps ?? 0.75,
+      },
+    };
+    body.mm_processor_kwargs = {
+      size: {
+        shortest_edge: 1568,
+        longest_edge: 262144,
+      },
+    };
+  }
+
+  return body;
+}
+
+function buildNvidiaMessages(request: AnalyzeRequest, profile: ModelProfile) {
+  const history = getProfiledHistory(request.history, profile, hasMediaInput(request));
+  const userMessage = buildUserMessage(
+    request,
+    profile.systemMode === "prepend-to-user" ? request.instructions : undefined,
+  );
+
+  if (profile.systemMode === "prepend-to-user") {
+    return [...history, userMessage];
+  }
+
+  return [
+    {
+      role: "system",
+      content: request.instructions,
+    },
+    ...history,
+    userMessage,
+  ];
 }
 
 function getProfiledHistory(
@@ -341,9 +397,9 @@ function getProfiledHistory(
   return typeof limit === "number" ? history.slice(-limit) : history;
 }
 
-function buildUserMessage(request: AnalyzeRequest) {
+function buildUserMessage(request: AnalyzeRequest, instructionPrefix?: string) {
   const media = [...request.attachments, ...extractMediaUrls(request.prompt)].slice(0, 4);
-  const text = request.prompt || DEFAULT_PROMPT;
+  const text = buildPromptText(request.prompt || DEFAULT_PROMPT, instructionPrefix);
 
   if (!media.length) {
     return {
@@ -372,6 +428,14 @@ function buildUserMessage(request: AnalyzeRequest) {
       ),
     ],
   };
+}
+
+function buildPromptText(text: string, instructionPrefix?: string) {
+  if (!instructionPrefix) {
+    return text;
+  }
+
+  return `${instructionPrefix}\n\nUser request:\n${text}`;
 }
 
 function extractMediaUrls(prompt: string): AiAttachment[] {
@@ -533,11 +597,13 @@ function createTextStream(
   options: {
     abortController: AbortController;
     inactivityTimeoutMs: number;
+    stripOutput?: ModelProfile["stripOutput"];
   },
 ) {
   const decoder = new TextDecoder();
   const encoder = new TextEncoder();
   const reader = providerBody.getReader();
+  const cleanOutput = createOutputCleaner(options.stripOutput);
   let buffer = "";
   let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
@@ -580,7 +646,7 @@ function createTextStream(
 
         if (done) {
           clearInactivityTimeout();
-          const remaining = flushSseBuffer(buffer);
+          const remaining = cleanOutput(flushSseBuffer(buffer), true);
 
           if (remaining) {
             controller.enqueue(encoder.encode(remaining));
@@ -600,7 +666,7 @@ function createTextStream(
 
         const chunk = buffer.slice(0, splitIndex);
         buffer = buffer.slice(splitIndex + 2);
-        const text = parseSseText(chunk);
+        const text = cleanOutput(parseSseText(chunk));
 
         if (text) {
           resetInactivityTimeout();
@@ -614,6 +680,65 @@ function createTextStream(
       reader.cancel();
     },
   });
+}
+
+function createOutputCleaner(stripOutput?: ModelProfile["stripOutput"]) {
+  let pending = "";
+
+  return (text: string, flush = false) => {
+    if (stripOutput !== "gemma-channel-tags" || !text) {
+      return text;
+    }
+
+    pending += text;
+
+    if (!flush && shouldHoldGemmaOutput(pending)) {
+      return "";
+    }
+
+    const cleaned = stripGemmaChannelTags(pending, flush);
+    pending = "";
+    return cleaned;
+  };
+}
+
+function shouldHoldGemmaOutput(text: string) {
+  const trimmed = text.trimStart();
+  const thoughtPrefix = "<|channel>thought";
+
+  if (thoughtPrefix.startsWith(trimmed)) {
+    return true;
+  }
+
+  if (trimmed.startsWith(thoughtPrefix) && !trimmed.includes("<channel|>")) {
+    return true;
+  }
+
+  const partialTagIndex = text.lastIndexOf("<");
+
+  if (partialTagIndex === -1) {
+    return false;
+  }
+
+  const partialTag = text.slice(partialTagIndex);
+
+  return ["<|channel>thought", "<|channel>final", "<channel|>"].some((tag) =>
+    tag.startsWith(partialTag),
+  );
+}
+
+function stripGemmaChannelTags(text: string, flush: boolean) {
+  let cleaned = text
+    .replace(/^\s*<\|channel\>thought[\s\S]*?<channel\|>/, "")
+    .replace(/<\|channel\>thought[\s\S]*?<channel\|>/g, "")
+    .replace(/<\|channel\>[a-z_]*\s*/gi, "")
+    .replace(/<channel\|>/g, "");
+
+  if (flush) {
+    cleaned = cleaned.replace(/^\s*<\|channel\>thought[\s\S]*$/, "");
+  }
+
+  return cleaned;
 }
 
 function flushSseBuffer(buffer: string) {
@@ -705,6 +830,8 @@ function normalizeError(error: unknown) {
   }
 
   if (error instanceof ProviderError) {
+    console.warn(error.message);
+
     if (error.status === 401 || error.status === 403) {
       return { status: 502, message: cleanErrors.unauthorized };
     }
@@ -716,15 +843,34 @@ function normalizeError(error: unknown) {
     if (error.status === 429) {
       return { status: 429, message: cleanErrors.rateLimited };
     }
+
+    if (error.status === 422) {
+      return { status: 422, message: cleanErrors.incompatible };
+    }
   }
 
   return { status: 502, message: cleanErrors.failed };
 }
 
 class ProviderError extends Error {
-  constructor(readonly status: number) {
-    super(`NVIDIA provider error ${status}`);
+  constructor(
+    readonly status: number,
+    readonly detail: string,
+  ) {
+    super(
+      detail
+        ? `NVIDIA provider error ${status}: ${detail}`
+        : `NVIDIA provider error ${status}`,
+    );
   }
+}
+
+async function readProviderError(response: Response) {
+  const contentType = response.headers.get("Content-Type") ?? "";
+  const body = await response.text().catch(() => "");
+  const normalized = body.replace(/\s+/g, " ").trim().slice(0, 500);
+
+  return normalized || contentType || "";
 }
 
 function combineAbortSignals(...signals: AbortSignal[]) {
