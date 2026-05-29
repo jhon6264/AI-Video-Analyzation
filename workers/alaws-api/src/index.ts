@@ -77,9 +77,9 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
     extraBody: {
       reasoning_effort: "none",
     },
-    maxTokens: 4096,
-    startupTimeoutMs: 120_000,
-    streamInactivityTimeoutMs: 60_000,
+    maxTokens: 2048,
+    startupTimeoutMs: 240_000,
+    streamInactivityTimeoutMs: 90_000,
     historyLimit: 4,
   },
   "google/gemma-4-31b-it": {
@@ -106,9 +106,9 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
         thinking: false,
       },
     },
-    maxTokens: 4096,
-    startupTimeoutMs: 120_000,
-    streamInactivityTimeoutMs: 60_000,
+    maxTokens: 2048,
+    startupTimeoutMs: 240_000,
+    streamInactivityTimeoutMs: 90_000,
     historyLimit: 4,
   },
 };
@@ -287,6 +287,7 @@ async function streamNvidia(
     response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
+        Accept: "text/event-stream",
         Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
         "Content-Type": "application/json",
       },
@@ -299,6 +300,10 @@ async function streamNvidia(
 
   if (!response.ok) {
     throw new ProviderError(response.status, await readProviderError(response));
+  }
+
+  if (response.status === 202) {
+    throw new Error(cleanErrors.timeout);
   }
 
   if (!response.body) {
@@ -825,6 +830,10 @@ function normalizeError(error: unknown) {
     return { status: 400, message: cleanErrors.unsupportedVideoModel };
   }
 
+  if (error instanceof Error && error.message === cleanErrors.timeout) {
+    return { status: 504, message: cleanErrors.timeout };
+  }
+
   if (error instanceof DOMException && error.name === "AbortError") {
     return { status: 504, message: cleanErrors.timeout };
   }
@@ -844,7 +853,7 @@ function normalizeError(error: unknown) {
       return { status: 429, message: cleanErrors.rateLimited };
     }
 
-    if (error.status === 422) {
+    if (error.status === 400 || error.status === 422) {
       return { status: 422, message: cleanErrors.incompatible };
     }
   }
