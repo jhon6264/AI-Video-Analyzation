@@ -3,6 +3,9 @@
 	"name": "alaws-lang-api",
 	"main": "src/index.ts",
 	"compatibility_date": "2026-05-27",
+	"compatibility_flags": [
+		"enable_request_signal"
+	],
 	"vars": {
 		"ALLOWED_ORIGIN": "https://alawslang.vercel.app"
 	},

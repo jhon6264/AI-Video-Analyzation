@@ -285,14 +285,26 @@ async function streamNvidia(
   const hasVideo = hasVideoInput(request.prompt, request.attachments);
   const profile = getModelProfile(request.model);
   const providerController = new AbortController();
+  const abortProvider = () => providerController.abort();
   const startupTimeoutId = setTimeout(
-    () => providerController.abort(),
+    abortProvider,
     profile.startupTimeoutMs ??
       (hasVideo ? VIDEO_PROVIDER_TIMEOUT_MS : PROVIDER_TIMEOUT_MS),
   );
-  const signal = combineAbortSignals(requestSignal, providerController.signal);
+  const removeRequestAbortListener = () => {
+    requestSignal.removeEventListener("abort", abortProvider);
+  };
+
+  if (requestSignal.aborted) {
+    abortProvider();
+  } else {
+    requestSignal.addEventListener("abort", abortProvider, { once: true });
+  }
+
+  const signal = providerController.signal;
   const body = buildNvidiaBody(request, hasVideo, profile);
   const usesPolling = profile.responseMode === "poll";
+  let streamOwnsAbortCleanup = false;
   let response: Response;
 
   try {
@@ -306,18 +318,44 @@ async function streamNvidia(
       body: JSON.stringify(body),
       signal,
     });
-  } finally {
     clearTimeout(startupTimeoutId);
-  }
 
-  if (!response.ok) {
-    throw new ProviderError(response.status, await readProviderError(response));
-  }
+    if (!response.ok) {
+      throw new ProviderError(response.status, await readProviderError(response));
+    }
 
-  if (usesPolling) {
-    const content = await readPolledNvidiaText(response, env, signal, profile);
+    if (usesPolling) {
+      const content = await readPolledNvidiaText(response, env, signal, profile);
 
-    return new Response(content, {
+      return new Response(content, {
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-cache",
+        },
+      });
+    }
+
+    if (response.status === 202) {
+      throw new Error(cleanErrors.timeout);
+    }
+
+    if (!response.body) {
+      throw new Error("NVIDIA stream body missing");
+    }
+
+    const stream = createTextStream(response.body, {
+      abortController: providerController,
+      inactivityTimeoutMs:
+        profile.streamInactivityTimeoutMs ?? STREAM_INACTIVITY_TIMEOUT_MS,
+      onCleanup: removeRequestAbortListener,
+      requestSignal,
+      stripOutput: profile.stripOutput,
+    });
+    streamOwnsAbortCleanup = true;
+
+    return new Response(stream, {
       status: 200,
       headers: {
         ...corsHeaders,
@@ -325,31 +363,13 @@ async function streamNvidia(
         "Cache-Control": "no-cache",
       },
     });
+  } finally {
+    clearTimeout(startupTimeoutId);
+
+    if (!streamOwnsAbortCleanup) {
+      removeRequestAbortListener();
+    }
   }
-
-  if (response.status === 202) {
-    throw new Error(cleanErrors.timeout);
-  }
-
-  if (!response.body) {
-    throw new Error("NVIDIA stream body missing");
-  }
-
-  const stream = createTextStream(response.body, {
-    abortController: providerController,
-    inactivityTimeoutMs:
-      profile.streamInactivityTimeoutMs ?? STREAM_INACTIVITY_TIMEOUT_MS,
-    stripOutput: profile.stripOutput,
-  });
-
-  return new Response(stream, {
-    status: 200,
-    headers: {
-      ...corsHeaders,
-      "Content-Type": "text/plain; charset=utf-8",
-      "Cache-Control": "no-cache",
-    },
-  });
 }
 
 function buildNvidiaBody(
@@ -628,6 +648,8 @@ async function readPolledNvidiaText(
   signal: AbortSignal,
   profile: ModelProfile,
 ) {
+  throwIfAborted(signal);
+
   if (response.status === 200) {
     return cleanModelOutput(extractNvidiaText(await readResponseJson(response)), profile);
   }
@@ -648,6 +670,7 @@ async function readPolledNvidiaText(
 
   while (Date.now() < deadline) {
     await waitForPoll(intervalMs, signal);
+    throwIfAborted(signal);
 
     const pollResponse = await fetch(
       `${NVIDIA_STATUS_URL}/${encodeURIComponent(requestId)}`,
@@ -659,6 +682,7 @@ async function readPolledNvidiaText(
         signal,
       },
     );
+    throwIfAborted(signal);
 
     if (pollResponse.status === 202) {
       continue;
@@ -678,6 +702,12 @@ async function readPolledNvidiaText(
   }
 
   throw new Error(cleanErrors.timeout);
+}
+
+function throwIfAborted(signal: AbortSignal) {
+  if (signal.aborted) {
+    throw new DOMException("Request aborted", "AbortError");
+  }
 }
 
 async function readResponseJson(response: Response) {
@@ -805,6 +835,8 @@ function createTextStream(
   options: {
     abortController: AbortController;
     inactivityTimeoutMs: number;
+    onCleanup?: () => void;
+    requestSignal?: AbortSignal;
     stripOutput?: ModelProfile["stripOutput"];
   },
 ) {
@@ -814,6 +846,8 @@ function createTextStream(
   const cleanOutput = createOutputCleaner(options.stripOutput);
   let buffer = "";
   let inactivityTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let didCleanup = false;
+  let timedOut = false;
 
   const clearInactivityTimeout = () => {
     if (inactivityTimeoutId) {
@@ -825,9 +859,32 @@ function createTextStream(
   const resetInactivityTimeout = () => {
     clearInactivityTimeout();
     inactivityTimeoutId = setTimeout(() => {
+      timedOut = true;
       options.abortController.abort();
     }, options.inactivityTimeoutMs);
   };
+
+  const cleanup = () => {
+    if (didCleanup) {
+      return;
+    }
+
+    didCleanup = true;
+    clearInactivityTimeout();
+    options.requestSignal?.removeEventListener("abort", abortStream);
+    options.onCleanup?.();
+  };
+
+  const abortStream = () => {
+    options.abortController.abort();
+    void reader.cancel().catch(() => undefined);
+  };
+
+  if (options.requestSignal?.aborted) {
+    abortStream();
+  } else {
+    options.requestSignal?.addEventListener("abort", abortStream, { once: true });
+  }
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
@@ -839,10 +896,12 @@ function createTextStream(
         try {
           result = await reader.read();
         } catch (error) {
-          clearInactivityTimeout();
+          cleanup();
 
           if (error instanceof DOMException && error.name === "AbortError") {
-            controller.error(new Error(cleanErrors.timeout));
+            controller.error(
+              timedOut ? new Error(cleanErrors.timeout) : error,
+            );
             return;
           }
 
@@ -853,7 +912,7 @@ function createTextStream(
         const { done, value } = result;
 
         if (done) {
-          clearInactivityTimeout();
+          cleanup();
           const remaining = cleanOutput(flushSseBuffer(buffer), true);
 
           if (remaining) {
@@ -884,8 +943,9 @@ function createTextStream(
       }
     },
     cancel() {
-      clearInactivityTimeout();
-      reader.cancel();
+      cleanup();
+      options.abortController.abort();
+      void reader.cancel().catch(() => undefined);
     },
   });
 }
@@ -1091,21 +1151,6 @@ async function readProviderError(response: Response) {
   const normalized = body.replace(/\s+/g, " ").trim().slice(0, 500);
 
   return normalized || contentType || "";
-}
-
-function combineAbortSignals(...signals: AbortSignal[]) {
-  const controller = new AbortController();
-
-  for (const signal of signals) {
-    if (signal.aborted) {
-      controller.abort();
-      return controller.signal;
-    }
-
-    signal.addEventListener("abort", () => controller.abort(), { once: true });
-  }
-
-  return controller.signal;
 }
 
 function buildCorsHeaders(request: Request, env: Env) {

@@ -51,38 +51,35 @@ export default function AiPanel({
   );
 
   return (
-    <section className="shrink-0 p-3">
-      <p className="mb-3 text-xs font-medium uppercase text-zinc-500">AI</p>
+    <section className="shrink-0 px-3 py-3">
+      <p className="mb-2 text-xs font-medium uppercase text-zinc-500">AI</p>
       <div className="space-y-3">
         <div className="relative">
-          <span className="mb-1 block text-xs text-zinc-500">Model</span>
           <button
-            className="flex min-h-12 w-full items-center gap-2 rounded-md border border-zinc-800 bg-transparent px-2.5 py-2 text-left text-zinc-200 transition hover:border-zinc-600"
+            className="flex min-h-16 w-full items-start gap-2 rounded-md border border-zinc-800 bg-black px-2.5 py-2.5 text-left text-zinc-200 transition hover:border-zinc-600"
             onClick={() => setIsModelPickerOpen((current) => !current)}
             type="button"
           >
             {selectedModel ? <ModelIcon model={selectedModel} /> : null}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm">
-                {selectedModel?.label ?? "Select model"}
-              </span>
-                <span className="block truncate text-xs text-zinc-600">
-                  {selectedModel?.vendor ?? "NVIDIA NIM"}
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="block min-w-0 flex-1 truncate text-sm">
+                  {selectedModel?.label ?? "Select model"}
                 </span>
-                {selectedModel?.badges?.length ? (
-                  <span className="mt-1 flex gap-1">
-                    {selectedModel.badges.map((badge) => (
-                      <span
-                        className="rounded border border-zinc-800 px-1 font-mono text-[10px] uppercase text-zinc-500"
-                        key={badge}
-                      >
-                        {badge}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
+                <span className="shrink-0 font-mono text-xs text-zinc-500">
+                  <ChevronIcon isOpen={isModelPickerOpen} />
+                </span>
+              </span>
+              <span className="block truncate text-xs text-zinc-600">
+                {selectedModel?.vendor ?? "NVIDIA NIM"}
+              </span>
+              {selectedModel ? (
+                <span className="mt-1.5 flex flex-wrap gap-1">
+                  <CapabilityChips model={selectedModel} />
+                  <ModelBadges model={selectedModel} />
+                </span>
+              ) : null}
             </span>
-            <span className="font-mono text-xs text-zinc-500">v</span>
           </button>
           {isModelPickerOpen ? (
             <div className="absolute bottom-full left-0 z-30 mb-2 w-full rounded-md border border-zinc-800 bg-zinc-950 p-2 shadow-2xl">
@@ -94,11 +91,11 @@ export default function AiPanel({
                 value={modelQuery}
               />
               <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
-                {filteredModels.map((model) => (
+                {filteredModels.length ? filteredModels.map((model) => (
                   <button
-                    className={`flex w-full items-center gap-2 rounded-md border px-2.5 py-2 text-left transition ${
+                    className={`flex w-full items-start gap-2 rounded-md border px-2.5 py-2 text-left transition ${
                       settings.model === model.id
-                        ? "border-green-700 bg-green-950/30 text-green-100"
+                        ? "border-zinc-700 bg-zinc-900 text-zinc-100"
                         : "border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-100"
                     }`}
                     key={model.id}
@@ -111,45 +108,83 @@ export default function AiPanel({
                     type="button"
                   >
                     <ModelIcon model={model} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm">{model.label}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="block min-w-0 flex-1 truncate text-sm">
+                          {model.label}
+                        </span>
+                        {settings.model === model.id ? (
+                          <span className="shrink-0 rounded border border-green-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-green-400">
+                            current
+                          </span>
+                        ) : null}
+                      </span>
                       <span className="block truncate text-xs text-zinc-600">
                         {model.vendor}
                       </span>
-                      {model.badges?.length ? (
-                        <span className="mt-1 flex gap-1">
-                          {model.badges.map((badge) => (
-                            <span
-                              className="rounded border border-zinc-800 px-1 font-mono text-[10px] uppercase text-zinc-500"
-                              key={badge}
-                            >
-                              {badge}
-                            </span>
-                          ))}
-                        </span>
-                      ) : null}
+                      <span className="mt-1.5 flex flex-wrap gap-1">
+                        <CapabilityChips model={model} />
+                        <ModelBadges model={model} />
+                      </span>
                     </span>
                   </button>
-                ))}
+                )) : (
+                  <div className="rounded-md border border-dashed border-zinc-800 px-3 py-5 text-center font-mono text-xs text-zinc-500">
+                    No models found
+                  </div>
+                )}
               </div>
             </div>
           ) : null}
         </div>
-        <button
-          className="h-9 w-full rounded-md border border-zinc-800 text-sm text-zinc-200 transition hover:border-green-500 hover:text-green-300"
-          onClick={onOpenInstructions}
-          type="button"
-        >
-          Instructions
-        </button>
+        <div className="border-t border-zinc-900 pt-3">
+          <button
+            className="h-9 w-full rounded-md border border-zinc-800 text-sm text-zinc-200 transition hover:border-green-500 hover:text-green-300"
+            onClick={onOpenInstructions}
+            type="button"
+          >
+            Instructions
+          </button>
+        </div>
       </div>
     </section>
   );
 }
 
+function CapabilityChips({ model }: { model: ModelOption }) {
+  const capabilities = [
+    model.supportsImage ? "image" : null,
+    model.supportsVideo ? "video" : null,
+  ].filter((capability): capability is string => Boolean(capability));
+
+  if (!capabilities.length) {
+    return null;
+  }
+
+  return capabilities.map((capability) => (
+    <span
+      className="rounded border border-zinc-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-500"
+      key={capability}
+    >
+      {capability}
+    </span>
+  ));
+}
+
+function ModelBadges({ model }: { model: ModelOption }) {
+  return model.badges?.map((badge) => (
+    <span
+      className="rounded border border-zinc-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-500"
+      key={badge}
+    >
+      {badge}
+    </span>
+  ));
+}
+
 function ModelIcon({ model }: { model: ModelOption }) {
   return (
-    <span className="grid h-7 w-7 shrink-0 place-items-center overflow-hidden rounded bg-black">
+    <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded border border-zinc-900 bg-black">
       <Image
         alt=""
         className="h-5 w-5 object-contain"
@@ -158,5 +193,23 @@ function ModelIcon({ model }: { model: ModelOption }) {
         width={20}
       />
     </span>
+  );
+}
+
+function ChevronIcon({ isOpen }: { isOpen: boolean }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={`h-4 w-4 transition-transform ${isOpen ? "rotate-180" : ""}`}
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
   );
 }

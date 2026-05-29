@@ -130,27 +130,49 @@ async function readTextStream(
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let content = "";
+  const cancelReader = () => {
+    void reader.cancel().catch(() => undefined);
+  };
 
-  while (true) {
-    const { done, value } = await reader.read();
+  throwIfAborted(signal);
+  signal?.addEventListener("abort", cancelReader, { once: true });
 
-    if (done) {
-      break;
+  try {
+    while (true) {
+      throwIfAborted(signal);
+      let result: ReadableStreamReadResult<Uint8Array>;
+
+      try {
+        result = await reader.read();
+      } catch (error) {
+        throwIfAborted(signal);
+        throw error;
+      }
+
+      throwIfAborted(signal);
+      const { done, value } = result;
+
+      if (done) {
+        break;
+      }
+
+      const token = decoder.decode(value, { stream: true });
+      content += token;
+      await emitTypewriterToken(token, onToken, signal);
     }
 
-    const token = decoder.decode(value, { stream: true });
-    content += token;
-    await emitTypewriterToken(token, onToken, signal);
+    const trailing = decoder.decode();
+
+    if (trailing) {
+      content += trailing;
+      await emitTypewriterToken(trailing, onToken, signal);
+    }
+
+    return content;
+  } finally {
+    signal?.removeEventListener("abort", cancelReader);
+    reader.releaseLock();
   }
-
-  const trailing = decoder.decode();
-
-  if (trailing) {
-    content += trailing;
-    await emitTypewriterToken(trailing, onToken, signal);
-  }
-
-  return content;
 }
 
 async function emitTypewriterToken(
@@ -165,9 +187,7 @@ async function emitTypewriterToken(
   const chunks = chunkText(token, 4);
 
   for (const chunk of chunks) {
-    if (signal?.aborted) {
-      throw new DOMException("Request aborted", "AbortError");
-    }
+    throwIfAborted(signal);
 
     onToken(chunk);
 
@@ -190,7 +210,7 @@ function chunkText(text: string, size: number) {
 function wait(ms: number, signal?: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
     if (signal?.aborted) {
-      reject(new DOMException("Request aborted", "AbortError"));
+      reject(createAbortError());
       return;
     }
 
@@ -200,9 +220,19 @@ function wait(ms: number, signal?: AbortSignal) {
       "abort",
       () => {
         window.clearTimeout(timeout);
-        reject(new DOMException("Request aborted", "AbortError"));
+        reject(createAbortError());
       },
       { once: true },
     );
   });
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function createAbortError() {
+  return new DOMException("Request aborted", "AbortError");
 }

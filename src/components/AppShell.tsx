@@ -24,6 +24,13 @@ import Composer from "./Composer";
 import InstructionsModal from "./InstructionsModal";
 import Transcript from "./Transcript";
 
+type ActiveRequest = {
+  id: string;
+  assistantId: string;
+  controller: AbortController;
+  sessionId: string;
+};
+
 function createEmptySession(): ChatSession {
   const now = new Date().toISOString();
 
@@ -105,7 +112,7 @@ export default function AppShell() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [hasHydrated, setHasHydrated] = useState(false);
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const activeRequestRef = useRef<ActiveRequest | null>(null);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -202,19 +209,23 @@ export default function AppShell() {
     });
   }
 
-  function updateActiveSession(updater: (session: ChatSession) => ChatSession) {
+  function updateSession(
+    sessionId: string,
+    updater: (session: ChatSession) => ChatSession,
+  ) {
     setSessions((current) =>
       current.map((session) =>
-        session.id === activeSessionId ? updater(session) : session,
+        session.id === sessionId ? updater(session) : session,
       ),
     );
   }
 
   function updateAssistantMessage(
+    sessionId: string,
     messageId: string,
     updater: (message: Message) => Message,
   ) {
-    updateActiveSession((session) => ({
+    updateSession(sessionId, (session) => ({
       ...session,
       messages: session.messages.map((message) =>
         message.id === messageId ? updater(message) : message,
@@ -276,6 +287,8 @@ export default function AppShell() {
       status: "done",
     };
     const assistantId = createId("msg");
+    const requestId = createId("request");
+    const sessionId = activeSession.id;
     const assistantMessage: Message = {
       id: assistantId,
       role: "assistant",
@@ -288,8 +301,13 @@ export default function AppShell() {
 
     setIsSending(true);
     const abortController = new AbortController();
-    abortControllerRef.current = abortController;
-    updateActiveSession((session) => ({
+    activeRequestRef.current = {
+      id: requestId,
+      assistantId,
+      controller: abortController,
+      sessionId,
+    };
+    updateSession(sessionId, (session) => ({
       ...session,
       title: session.messages.length ? session.title : createSessionTitle(titlePrompt),
       updatedAt: now,
@@ -306,7 +324,11 @@ export default function AppShell() {
         history: getRecentHistory(activeSession),
         signal: abortController.signal,
         onToken: (token) => {
-          updateAssistantMessage(assistantId, (message) => ({
+          if (activeRequestRef.current?.id !== requestId) {
+            return;
+          }
+
+          updateAssistantMessage(sessionId, assistantId, (message) => ({
             ...message,
             content: `${message.content}${token}`,
           }));
@@ -314,7 +336,11 @@ export default function AppShell() {
       });
       const completedAt = new Date().toISOString();
 
-      updateAssistantMessage(assistantId, (message) => ({
+      if (activeRequestRef.current?.id !== requestId) {
+        return;
+      }
+
+      updateAssistantMessage(sessionId, assistantId, (message) => ({
         ...message,
         content:
           message.content ||
@@ -325,8 +351,12 @@ export default function AppShell() {
         model: response.model,
         status: message.content || response.content ? "done" : "error",
       }));
-      updateActiveSession((session) => ({ ...session, updatedAt: completedAt }));
+      updateSession(sessionId, (session) => ({ ...session, updatedAt: completedAt }));
     } catch (error) {
+      if (activeRequestRef.current?.id !== requestId) {
+        return;
+      }
+
       const failedAt = new Date().toISOString();
       const wasStopped = error instanceof Error && error.name === "AbortError";
       const content = wasStopped
@@ -335,7 +365,7 @@ export default function AppShell() {
           ? error.message
           : "All providers are currently busy. Try again in a few minutes.";
 
-      updateActiveSession((session) => ({
+      updateSession(sessionId, (session) => ({
         ...session,
         updatedAt: failedAt,
         messages: session.messages.map((message) =>
@@ -350,13 +380,40 @@ export default function AppShell() {
         ),
       }));
     } finally {
-      abortControllerRef.current = null;
-      setIsSending(false);
+      if (activeRequestRef.current?.id === requestId) {
+        activeRequestRef.current = null;
+        setIsSending(false);
+      }
     }
   }
 
   function handleStop() {
-    abortControllerRef.current?.abort();
+    const activeRequest = activeRequestRef.current;
+
+    if (!activeRequest) {
+      return;
+    }
+
+    activeRequestRef.current = null;
+    activeRequest.controller.abort();
+    setIsSending(false);
+
+    const stoppedAt = new Date().toISOString();
+
+    updateSession(activeRequest.sessionId, (session) => ({
+      ...session,
+      updatedAt: stoppedAt,
+      messages: session.messages.map((message) =>
+        message.id === activeRequest.assistantId
+          ? {
+              ...message,
+              completedAt: stoppedAt,
+              content: message.content || "> stopped",
+              status: "stopped",
+            }
+          : message,
+      ),
+    }));
   }
 
   return (
@@ -424,11 +481,12 @@ export default function AppShell() {
           <header className="flex h-12 shrink-0 items-center justify-between px-[clamp(1rem,3vw,1.5rem)]">
             <div className="flex items-center gap-3">
               <button 
+                aria-label={isMobileMenuOpen ? "Close sidebar" : "Open sidebar"}
                 className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
                 onClick={() => setIsMobileMenuOpen((current) => !current)}
                 type="button"
               >
-                {isMobileMenuOpen ? "<" : ">"}
+                {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
               </button>
               <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
                 Alaws lage.
@@ -437,7 +495,7 @@ export default function AppShell() {
             <Image 
               src={logo} 
               alt="Alaws lang logo" 
-              className="h-8 w-8 object-contain"
+              className="h-10 w-10 object-contain lg:h-11 lg:w-11"
             />
           </header>
           <Transcript session={activeSession} />
@@ -471,6 +529,45 @@ function SidebarToggleIcon({ isExpanded }: { isExpanded: boolean }) {
     >
       <rect width="18" height="18" x="3" y="3" rx="2" />
       <path d="m10 8 4 4-4 4" />
+    </svg>
+  );
+}
+
+function MenuIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="M4 7h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17h16" />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="h-4 w-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth={2}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path d="m6 6 12 12" />
+      <path d="m18 6-12 12" />
     </svg>
   );
 }
