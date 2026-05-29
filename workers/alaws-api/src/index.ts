@@ -46,9 +46,12 @@ type R2ObjectBody = {
 
 const NVIDIA_CHAT_COMPLETIONS_URL =
   "https://integrate.api.nvidia.com/v1/chat/completions";
+const NVIDIA_STATUS_URL = "https://integrate.api.nvidia.com/v1/status";
 const PROVIDER_TIMEOUT_MS = 45_000;
 const VIDEO_PROVIDER_TIMEOUT_MS = 90_000;
 const STREAM_INACTIVITY_TIMEOUT_MS = 45_000;
+const POLL_INTERVAL_MS = 2_000;
+const POLL_TIMEOUT_MS = 360_000;
 const DEFAULT_PROMPT =
   "Analyze the attached media and answer naturally based on what you can see.";
 const VIDEO_MODEL_IDS = new Set([
@@ -60,6 +63,9 @@ const VIDEO_MODEL_IDS = new Set([
 type ModelProfile = {
   extraBody?: Record<string, unknown>;
   maxTokens?: number;
+  pollIntervalMs?: number;
+  pollTimeoutMs?: number;
+  responseMode?: "stream" | "poll";
   temperature?: number;
   topP?: number;
   topK?: number;
@@ -75,9 +81,10 @@ type ModelProfile = {
 const MODEL_PROFILES: Record<string, ModelProfile> = {
   "deepseek-ai/deepseek-v4-pro": {
     extraBody: {
-      reasoning_effort: "none",
+      reasoning_effort: "high",
     },
-    maxTokens: 2048,
+    maxTokens: 4096,
+    responseMode: "poll",
     startupTimeoutMs: 240_000,
     streamInactivityTimeoutMs: 90_000,
     historyLimit: 4,
@@ -85,10 +92,11 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
   "google/gemma-4-31b-it": {
     extraBody: {
       chat_template_kwargs: {
-        enable_thinking: false,
+        enable_thinking: true,
       },
     },
     maxTokens: 4096,
+    responseMode: "poll",
     temperature: 1,
     topP: 0.95,
     topK: 64,
@@ -103,10 +111,11 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
   "moonshotai/kimi-k2.6": {
     extraBody: {
       chat_template_kwargs: {
-        thinking: false,
+        thinking: true,
       },
     },
-    maxTokens: 2048,
+    maxTokens: 4096,
+    responseMode: "poll",
     startupTimeoutMs: 240_000,
     streamInactivityTimeoutMs: 90_000,
     historyLimit: 4,
@@ -126,6 +135,8 @@ const cleanErrors = {
   rateLimited: "The selected NVIDIA model is rate limited right now.",
   timeout:
     "The selected large model is still processing or queued. Try a shorter prompt or choose a faster model.",
+  pendingWithoutId:
+    "NVIDIA accepted the selected model request but did not return a polling request ID.",
   incompatible:
     "The selected model request is incompatible with NVIDIA's endpoint. Try a shorter prompt or choose a faster model.",
   failed: "The selected NVIDIA model failed. Try again or choose another model.",
@@ -281,13 +292,14 @@ async function streamNvidia(
   );
   const signal = combineAbortSignals(requestSignal, providerController.signal);
   const body = buildNvidiaBody(request, hasVideo, profile);
+  const usesPolling = profile.responseMode === "poll";
   let response: Response;
 
   try {
     response = await fetch(NVIDIA_CHAT_COMPLETIONS_URL, {
       method: "POST",
       headers: {
-        Accept: "text/event-stream",
+        Accept: usesPolling ? "application/json" : "text/event-stream",
         Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
         "Content-Type": "application/json",
       },
@@ -300,6 +312,19 @@ async function streamNvidia(
 
   if (!response.ok) {
     throw new ProviderError(response.status, await readProviderError(response));
+  }
+
+  if (usesPolling) {
+    const content = await readPolledNvidiaText(response, env, signal, profile);
+
+    return new Response(content, {
+      status: 200,
+      headers: {
+        ...corsHeaders,
+        "Content-Type": "text/plain; charset=utf-8",
+        "Cache-Control": "no-cache",
+      },
+    });
   }
 
   if (response.status === 202) {
@@ -337,7 +362,7 @@ function buildNvidiaBody(
     messages: buildNvidiaMessages(request, profile),
     temperature: profile.temperature ?? 0.2,
     max_tokens: profile.maxTokens ?? (hasVideo ? 1200 : 1000),
-    stream: true,
+    stream: profile.responseMode !== "poll",
   };
 
   if (typeof profile.topP === "number") {
@@ -597,6 +622,184 @@ function safeFileName(name: string) {
   );
 }
 
+async function readPolledNvidiaText(
+  response: Response,
+  env: Env,
+  signal: AbortSignal,
+  profile: ModelProfile,
+) {
+  if (response.status === 200) {
+    return cleanModelOutput(extractNvidiaText(await readResponseJson(response)), profile);
+  }
+
+  if (response.status !== 202) {
+    throw new ProviderError(response.status, await readProviderError(response));
+  }
+
+  const requestId = extractRequestId(await readResponseJson(response));
+
+  if (!requestId) {
+    throw new ProviderError(response.status, cleanErrors.pendingWithoutId);
+  }
+
+  const timeoutMs = profile.pollTimeoutMs ?? POLL_TIMEOUT_MS;
+  const intervalMs = profile.pollIntervalMs ?? POLL_INTERVAL_MS;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    await waitForPoll(intervalMs, signal);
+
+    const pollResponse = await fetch(
+      `${NVIDIA_STATUS_URL}/${encodeURIComponent(requestId)}`,
+      {
+        headers: {
+          Accept: "application/json",
+          Authorization: `Bearer ${env.NVIDIA_API_KEY}`,
+        },
+        signal,
+      },
+    );
+
+    if (pollResponse.status === 202) {
+      continue;
+    }
+
+    if (!pollResponse.ok) {
+      throw new ProviderError(
+        pollResponse.status,
+        await readProviderError(pollResponse),
+      );
+    }
+
+    return cleanModelOutput(
+      extractNvidiaText(await readResponseJson(pollResponse)),
+      profile,
+    );
+  }
+
+  throw new Error(cleanErrors.timeout);
+}
+
+async function readResponseJson(response: Response) {
+  return (await response.json().catch(() => null)) as unknown;
+}
+
+function extractRequestId(value: unknown): string {
+  const record = toRecord(value);
+
+  if (!record) {
+    return "";
+  }
+
+  for (const key of ["requestId", "request_id"]) {
+    const id = record[key];
+
+    if (typeof id === "string" && id.length > 0 && id.length <= 80) {
+      return id;
+    }
+  }
+
+  for (const key of ["response", "result", "data"]) {
+    const id = extractRequestId(record[key]);
+
+    if (id) {
+      return id;
+    }
+  }
+
+  return "";
+}
+
+function extractNvidiaText(value: unknown, depth = 0): string {
+  if (depth > 6 || value === null || value === undefined) {
+    return "";
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => extractNvidiaText(item, depth + 1)).join("");
+  }
+
+  const record = toRecord(value);
+
+  if (!record) {
+    return "";
+  }
+
+  const choices = record.choices;
+
+  if (Array.isArray(choices)) {
+    const text = choices
+      .map((choice) => extractNvidiaText(choice, depth + 1))
+      .join("");
+
+    if (text) {
+      return text;
+    }
+  }
+
+  for (const key of ["message", "delta"]) {
+    const text = extractNvidiaText(record[key], depth + 1);
+
+    if (text) {
+      return text;
+    }
+  }
+
+  for (const key of ["content", "text", "output_text"]) {
+    const text = extractText(record[key]);
+
+    if (text) {
+      return text;
+    }
+  }
+
+  for (const key of ["output", "response", "result", "data"]) {
+    const text = extractNvidiaText(record[key], depth + 1);
+
+    if (text) {
+      return text;
+    }
+  }
+
+  return "";
+}
+
+function cleanModelOutput(text: string, profile: ModelProfile) {
+  return createOutputCleaner(profile.stripOutput)(text, true).trim();
+}
+
+function toRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function waitForPoll(ms: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Request aborted", "AbortError"));
+      return;
+    }
+
+    const timeout = setTimeout(resolve, ms);
+
+    signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timeout);
+        reject(new DOMException("Request aborted", "AbortError"));
+      },
+      { once: true },
+    );
+  });
+}
+
 function createTextStream(
   providerBody: ReadableStream<Uint8Array>,
   options: {
@@ -834,6 +1037,10 @@ function normalizeError(error: unknown) {
     return { status: 504, message: cleanErrors.timeout };
   }
 
+  if (error instanceof Error && error.message === cleanErrors.pendingWithoutId) {
+    return { status: 502, message: cleanErrors.pendingWithoutId };
+  }
+
   if (error instanceof DOMException && error.name === "AbortError") {
     return { status: 504, message: cleanErrors.timeout };
   }
@@ -855,6 +1062,10 @@ function normalizeError(error: unknown) {
 
     if (error.status === 400 || error.status === 422) {
       return { status: 422, message: cleanErrors.incompatible };
+    }
+
+    if (error.status === 202) {
+      return { status: 502, message: cleanErrors.pendingWithoutId };
     }
   }
 
