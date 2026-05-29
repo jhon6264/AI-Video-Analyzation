@@ -56,7 +56,7 @@ export default function AiPanel({
       <div className="space-y-3">
         <div className="relative">
           <button
-            className="flex min-h-16 w-full items-start gap-2 rounded-md border border-zinc-800 bg-black px-2.5 py-2.5 text-left text-zinc-200 transition hover:border-zinc-600"
+            className="flex min-h-12 w-full items-center gap-2 rounded-md border border-zinc-800 bg-black px-2.5 py-2.5 text-left text-zinc-200 transition hover:border-zinc-600"
             onClick={() => setIsModelPickerOpen((current) => !current)}
             type="button"
           >
@@ -71,14 +71,8 @@ export default function AiPanel({
                 </span>
               </span>
               <span className="block truncate text-xs text-zinc-600">
-                {selectedModel?.vendor ?? "NVIDIA NIM"}
+                {selectedModel?.vendor ?? "AI model"}
               </span>
-              {selectedModel ? (
-                <span className="mt-1.5 flex flex-wrap gap-1">
-                  <CapabilityChips model={selectedModel} />
-                  <ModelBadges model={selectedModel} />
-                </span>
-              ) : null}
             </span>
           </button>
           {isModelPickerOpen ? (
@@ -122,10 +116,6 @@ export default function AiPanel({
                       <span className="block truncate text-xs text-zinc-600">
                         {model.vendor}
                       </span>
-                      <span className="mt-1.5 flex flex-wrap gap-1">
-                        <CapabilityChips model={model} />
-                        <ModelBadges model={model} />
-                      </span>
                     </span>
                   </button>
                 )) : (
@@ -149,37 +139,6 @@ export default function AiPanel({
       </div>
     </section>
   );
-}
-
-function CapabilityChips({ model }: { model: ModelOption }) {
-  const capabilities = [
-    model.supportsImage ? "image" : null,
-    model.supportsVideo ? "video" : null,
-  ].filter((capability): capability is string => Boolean(capability));
-
-  if (!capabilities.length) {
-    return null;
-  }
-
-  return capabilities.map((capability) => (
-    <span
-      className="rounded border border-zinc-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-500"
-      key={capability}
-    >
-      {capability}
-    </span>
-  ));
-}
-
-function ModelBadges({ model }: { model: ModelOption }) {
-  return model.badges?.map((badge) => (
-    <span
-      className="rounded border border-zinc-800 px-1.5 py-0.5 font-mono text-[10px] uppercase text-zinc-500"
-      key={badge}
-    >
-      {badge}
-    </span>
-  ));
 }
 
 function ModelIcon({ model }: { model: ModelOption }) {

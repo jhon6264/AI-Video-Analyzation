@@ -127,19 +127,19 @@ const cleanErrors = {
   invalidUpload: "Upload a PNG, JPG, WebP, MP4, WebM, or MOV file.",
   uploadTooLarge: "Images must be 10MB or smaller. Videos must be 50MB or smaller.",
   missingBucket: "Cloudflare R2 upload bucket is not configured.",
-  missingKey: "NVIDIA API key is not configured.",
+  missingKey: "Model API key is not configured.",
   unsupportedVideoModel:
-    "Choose Qwen3.5, Gemma 4 31B, or Gemma 3n for video analysis.",
-  unauthorized: "NVIDIA rejected the API key or account access.",
-  unavailable: "The selected NVIDIA model is unavailable on this endpoint.",
-  rateLimited: "The selected NVIDIA model is rate limited right now.",
+    "Choose a video-capable model before analyzing videos.",
+  unauthorized: "The model provider rejected the API key or account access.",
+  unavailable: "The selected model is unavailable on this endpoint.",
+  rateLimited: "The selected model is rate limited right now.",
   timeout:
-    "The selected large model is still processing or queued. Try a shorter prompt or choose a faster model.",
+    "The selected model is still processing or queued. Try a shorter prompt or choose a faster model.",
   pendingWithoutId:
-    "NVIDIA accepted the selected model request but did not return a polling request ID.",
+    "The model provider accepted the request but did not return a polling request ID.",
   incompatible:
-    "The selected model request is incompatible with NVIDIA's endpoint. Try a shorter prompt or choose a faster model.",
-  failed: "The selected NVIDIA model failed. Try again or choose another model.",
+    "The selected model request is incompatible with this endpoint. Try a shorter prompt or choose a faster model.",
+  failed: "The selected model failed. Try again or choose another model.",
 };
 
 const worker = {

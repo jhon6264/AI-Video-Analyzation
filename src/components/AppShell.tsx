@@ -461,7 +461,10 @@ export default function AppShell() {
                 activeSessionId={activeSessionId}
                 sessions={sessions}
                 onDeleteSession={deleteSession}
-                onNewChat={handleNewChat}
+                onNewChat={() => {
+                  handleNewChat();
+                  setIsMobileMenuOpen(false);
+                }}
                 onRenameSession={renameSession}
                 onSelectSession={(id) => {
                   setActiveSessionId(id);
@@ -482,13 +485,13 @@ export default function AppShell() {
             <div className="flex items-center gap-3">
               <button 
                 aria-label={isMobileMenuOpen ? "Close sidebar" : "Open sidebar"}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-zinc-800 text-zinc-400 lg:hidden"
+                className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-lg font-semibold text-zinc-400 transition hover:bg-zinc-900 hover:text-white focus-visible:bg-zinc-900 focus-visible:text-white lg:hidden"
                 onClick={() => setIsMobileMenuOpen((current) => !current)}
                 type="button"
               >
-                {isMobileMenuOpen ? <CloseIcon /> : <MenuIcon />}
+                &gt;
               </button>
-              <h1 className="font-mono text-[clamp(0.875rem,1.5vw,1rem)] font-semibold tracking-normal text-zinc-100">
+              <h1 className="font-mono text-[clamp(1rem,1.8vw,1.125rem)] font-semibold tracking-normal text-zinc-100">
                 Alaws lage.
               </h1>
             </div>
@@ -529,45 +532,6 @@ function SidebarToggleIcon({ isExpanded }: { isExpanded: boolean }) {
     >
       <rect width="18" height="18" x="3" y="3" rx="2" />
       <path d="m10 8 4 4-4 4" />
-    </svg>
-  );
-}
-
-function MenuIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="M4 7h16" />
-      <path d="M4 12h16" />
-      <path d="M4 17h16" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="h-4 w-4"
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path d="m6 6 12 12" />
-      <path d="m18 6-12 12" />
     </svg>
   );
 }

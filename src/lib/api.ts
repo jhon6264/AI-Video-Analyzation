@@ -56,7 +56,7 @@ export async function runAiTask({
         | { error?: string }
         | null;
       throw new Error(
-        data?.error ?? "The selected NVIDIA model failed. Try another model.",
+        data?.error ?? "The selected model failed. Try another model.",
       );
     }
 

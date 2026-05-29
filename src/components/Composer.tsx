@@ -183,7 +183,7 @@ export default function Composer({ isSending, onStop, onSubmit }: ComposerProps)
 
   return (
     <form
-      className="shrink-0 border-t border-zinc-800 bg-black px-[clamp(1rem,3vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)] pb-[calc(clamp(1rem,2vh,1.5rem)+env(safe-area-inset-bottom))]"
+      className="shrink-0 bg-black px-[clamp(1rem,3vw,1.5rem)] py-[clamp(1rem,2vh,1.5rem)] pb-[calc(clamp(1rem,2vh,1.5rem)+env(safe-area-inset-bottom))]"
       onSubmit={submit}
     >
       <div className="mx-auto max-w-4xl flex items-center gap-3">
