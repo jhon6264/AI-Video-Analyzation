@@ -8,7 +8,7 @@ type AssistantTerminalOutputProps = {
   message: Message;
 };
 
-const thinkingPhrases = ["Thinking", "Papibords", "Eian Bading", "Hulat gamay", "Hapit na", "Almost done", "Here it comes", "Hakdog", "Ara na", "wait po", "kadali lang" ];
+const thinkingPhrases = ["Thinking", "Papibords", "Eian Bading", "Hulat gamay", "Hapit na", "Almost done", "Here it comes", "Hakdog", "Ara na", "Wait", "Kadali lang", "Imo sa oh" ];
 
 export default function AssistantTerminalOutput({
   message,
@@ -25,7 +25,7 @@ export default function AssistantTerminalOutput({
 
     const interval = window.setInterval(() => {
       setPhraseIndex((current) => (current + 1) % thinkingPhrases.length);
-    }, 700);
+    }, 3000);
 
     return () => window.clearInterval(interval);
   }, [message.status]);

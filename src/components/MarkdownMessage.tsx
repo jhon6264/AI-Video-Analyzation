@@ -12,7 +12,7 @@ const markdownComponents: Components = {
   a({ children, href }) {
     return (
       <a
-        className="text-green-300 underline decoration-green-900 underline-offset-4 transition hover:text-green-200"
+        className="font-medium text-green-300 underline decoration-green-900 decoration-1 underline-offset-4 transition hover:text-green-200"
         href={href}
         rel="noreferrer"
         target="_blank"
@@ -23,7 +23,7 @@ const markdownComponents: Components = {
   },
   blockquote({ children }) {
     return (
-      <blockquote className="border-l-2 border-zinc-700 pl-4 text-zinc-400">
+      <blockquote className="rounded-r-md border-l-2 border-zinc-700 bg-zinc-950/60 py-2 pl-4 pr-3 text-sm leading-7 text-zinc-400">
         {children}
       </blockquote>
     );
@@ -37,57 +37,86 @@ const markdownComponents: Components = {
     }
 
     return (
-      <code className="rounded bg-zinc-950 px-1.5 py-0.5 font-mono text-[0.9em] text-zinc-100">
+      <code className="rounded border border-zinc-800 bg-zinc-950 px-1.5 py-0.5 font-mono text-[0.9em] text-zinc-100">
         {children}
       </code>
     );
   },
   h1({ children }) {
-    return <h1 className="text-xl font-semibold text-zinc-50">{children}</h1>;
+    return (
+      <h1 className="pt-1 text-[1.625rem] font-semibold leading-tight tracking-normal text-zinc-50">
+        {children}
+      </h1>
+    );
   },
   h2({ children }) {
-    return <h2 className="text-lg font-semibold text-zinc-50">{children}</h2>;
+    return (
+      <h2 className="pt-3 text-xl font-semibold leading-snug tracking-normal text-zinc-50">
+        {children}
+      </h2>
+    );
   },
   h3({ children }) {
-    return <h3 className="text-base font-semibold text-zinc-100">{children}</h3>;
+    return (
+      <h3 className="pt-2 text-base font-semibold leading-snug tracking-normal text-zinc-100">
+        {children}
+      </h3>
+    );
   },
   hr() {
-    return <hr className="border-zinc-800" />;
+    return <hr className="my-7 border-0 border-t border-zinc-800" />;
+  },
+  li({ children }) {
+    return <li className="pl-1 leading-7">{children}</li>;
   },
   ol({ children }) {
-    return <ol className="ml-5 list-decimal space-y-1.5">{children}</ol>;
+    return (
+      <ol className="ml-5 list-decimal space-y-1.5 marker:text-zinc-500">
+        {children}
+      </ol>
+    );
   },
   p({ children }) {
-    return <p>{children}</p>;
+    return <p className="text-sm leading-7 text-zinc-300">{children}</p>;
   },
   pre({ children }) {
     return <>{children}</>;
   },
   table({ children }) {
     return (
-      <div className="my-4 overflow-x-auto rounded-md border border-zinc-800">
-        <table className="w-full border-collapse text-left text-sm">{children}</table>
+      <div className="my-5 overflow-x-auto rounded-md border border-zinc-800 bg-zinc-950/40">
+        <table className="w-full border-collapse text-left text-sm leading-6">
+          {children}
+        </table>
       </div>
     );
   },
   td({ children }) {
-    return <td className="border-t border-zinc-800 px-3 py-2">{children}</td>;
+    return (
+      <td className="border-t border-zinc-800 px-3 py-2.5 text-zinc-300">
+        {children}
+      </td>
+    );
   },
   th({ children }) {
     return (
-      <th className="border-b border-zinc-800 bg-zinc-950 px-3 py-2 font-semibold text-zinc-100">
+      <th className="border-b border-zinc-800 bg-zinc-950 px-3 py-2.5 font-semibold text-zinc-100">
         {children}
       </th>
     );
   },
   ul({ children }) {
-    return <ul className="ml-5 list-disc space-y-1.5">{children}</ul>;
+    return (
+      <ul className="ml-5 list-disc space-y-1.5 marker:text-zinc-500">
+        {children}
+      </ul>
+    );
   },
 };
 
 export default function MarkdownMessage({ content }: MarkdownMessageProps) {
   return (
-    <div className="markdown-message max-w-none space-y-4 break-words text-sm leading-7 text-zinc-200">
+    <div className="markdown-message max-w-none space-y-4 break-words text-sm leading-7 text-zinc-300">
       <ReactMarkdown components={markdownComponents} remarkPlugins={[remarkGfm]}>
         {content}
       </ReactMarkdown>

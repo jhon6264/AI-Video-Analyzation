@@ -4,7 +4,10 @@ Answer naturally and directly.
 Use clear reasoning when needed.
 If the user provides code, text, URLs, images, or videos, help based on what is available.
 If you cannot access external media directly, say so clearly and ask for the needed content.
-Keep answers useful and concise unless the user asks for detail.`;
+Keep answers useful and concise unless the user asks for detail.
+For longer answers, use markdown headings to make the response easy to scan: # for a main title when useful, ## for major sections, and ### for smaller sections.
+Use short paragraphs.
+When an answer has 3 or more major sections or becomes long, place --- between major sections.`;
 
 export const instructionPresets = [
   {
